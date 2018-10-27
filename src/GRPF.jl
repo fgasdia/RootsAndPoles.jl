@@ -1,7 +1,8 @@
 """
 # GRPF: Global complex Roots and Poles Finding algorithm
 
-A Julia implementation of the [Matlab code](https://github.com/PioKow/GRPF) by Piotr Kowalczyk.
+A Julia implementation of the GRPF [Matlab code](https://github.com/PioKow/GRPF) by Piotr
+Kowalczyk.
 """
 # module GRPF
 
@@ -53,8 +54,8 @@ for ``|z| < R``.
 
 See also: `disk_dom.m`
 """
-function diskdomain(R, r)
-    h = r*sqrt(3)/2
+function diskdomain(R, Δr)
+    h = Δr*sqrt(3)/2
     n = 1 + round(Int64, R/h)
     Rn = (1:n)*R/n
     newnodes = [complex(0.0)]
@@ -90,30 +91,34 @@ function quadrant(val::ComplexF64)
 end
 
 """
-Evaluate function `fcn` for [`quadrant`](@ref) at `newnodescoords` and fill `quadrants`.
+Evaluate function `fcn` for [`quadrant`](@ref) at `nodes` and fill `quadrants`.
 
 `quadrants` is a Vector{} where each index corresponds to `node` index.
 """
-function assignquadrants!(quadrants, nodes, fcn)
+function assignquadrants!(quadrants::AbstractArray{Int64, 1},
+                          nodes::AbstractArray{IndexablePoint2D,1}, fcn)
     for ii in eachindex(nodes)
         val = fcn(nodes[ii])
         quadrants[getindex(nodes[ii])] = quadrant(val)
     end
+    nothing
 end
 
 """
-Return candidate edges `𝓔`.
+Return candidate edges `𝓔` that contain a phase change of 2 quadrants.
 
-Since any triangulation of the four nodes located in the four different quadrants requires
-at least one edge of ``|ΔQ| = 2``, then all such edges are potentially in the vicinity of a
-root or pole.
+Any root or pole is located at the point where the regions described by four different
+quadrants meet. Since any triangulation of the four nodes located in the four different
+quadrants requires at least one edge of ``|ΔQ| = 2``, then all such edges are potentially
+in the vicinity of a root or pole.
 
-`phasediffs` is returned only for diagnosis and plotting. It can be removed without affecting
-this function.
-
-Note: Order of `𝓔` is not guaranteed.
+Notes:
+ - Order of `𝓔` is not guaranteed.
+ - `phasediffs` is returned only for diagnosis and plotting. It can be removed without affecting
+ this function.
 """
-function candidateedges(tess, quadrants)
+function candidateedges(tess::DelaunayTessellation2D{IndexablePoint2D},
+                        quadrants::AbstractArray{Int64, 1})
     phasediffs = Vector{Int64}()
     𝓔 = Vector{DelaunayEdge}()
     for edge in delaunayedges(tess)
@@ -137,12 +142,12 @@ end
 """
 Select edges with length greater than `tolerance`.
 """
-function selectedges(edges, tolerance, geom2fcn)
+function selectedges(edges::AbstractArray{DelaunayEdge,1}, tolerance, geom2fcn)
     min𝓔length = typemax(Float64)
     max𝓔length = typemin(Float64)
     select𝓔 = Vector{DelaunayEdge}()
     for ii in eachindex(edges)
-        elen = distance(geom2fcn(edges[ii])...)[1]  # unpacks single-element array
+        elen = distance(geom2fcn(edges[ii])...)
         elen > tolerance && push!(select𝓔, edges[ii])
         if elen > max𝓔length
             max𝓔length = elen
@@ -156,14 +161,12 @@ end
 """
 Counts how many times each triangle contains a node.
 """
-function counttriangleswithnodes(tess, edges::Array{DelaunayEdge,1})
+function counttriangleswithnodes(tess::DelaunayTessellation2D, edges::AbstractArray{DelaunayEdge,1})
     # Nodes of select edges
     edgenodes = Vector{IndexablePoint2D}()
     uniquenodes!(edgenodes, edges)
 
-    # TODO: This part of function is incredibly slow!
     trianglecounts = zeros(Int64, count(.!isexternal.(tess._trigs)))
-
     triidx = 0
     for triangle in tess
         triidx += 1
@@ -172,14 +175,14 @@ function counttriangleswithnodes(tess, edges::Array{DelaunayEdge,1})
         eb = getb(triangle)
         ec = getc(triangle)
         for nodeidx in eachindex(edgenodes)
-            if (ea == edgenodes[nodeidx]) | (eb == edgenodes[nodeidx]) | (ec == edgenodes[nodeidx])
+            if (ea == edgenodes[nodeidx]) || (eb == edgenodes[nodeidx]) || (ec == edgenodes[nodeidx])
                 trianglecounts[triidx] += 1
             end
         end
     end
     return trianglecounts
 end
-function uniquenodes!(edgenodes, edges::Array{DelaunayEdge,1})
+function uniquenodes!(edgenodes, edges::AbstractArray{DelaunayEdge,1})
     for ii in eachindex(edges)
         nodea = geta(edges[ii])
         nodeb = getb(edges[ii])
