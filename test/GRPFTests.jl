@@ -327,8 +327,8 @@ end
         c = 3e8
         ω = 2π*f
         k₀ = ω/c
-        c = ϵᵣ^2*(k₀*d)^2*(ϵᵣ*μᵣ - 1)
-        w = ϵᵣ^2*z^2 + z^2*tan(z)^2 - c
+        cc = ϵᵣ^2*(k₀*d)^2*(ϵᵣ*μᵣ - 1)
+        w = ϵᵣ^2*z^2 + z^2*tan(z)^2 - cc
     end
 
     # Analysis parameters

@@ -45,6 +45,15 @@ function rectangulardomain(Zb, Ze, Δr)
     x = reshape(repeat(vx', n), m*n)
     x = [x; ((2:2:m) .- 1)*dx .+ real(Zb)]
 
+    # NOTE: Matlab values of `x` differ slightly because of Matlab's float handling and
+    # transpose operator.
+    # `sum(x)` is much closer between Julia and Matlab if the above line for `x` is:
+    # `matlabx = [x' ((2:2:m) .- 1)'*dx .+ real(Zb)]'`
+
+    # # TEMP
+    # x = [x' ((2:2:m) .- 1)'*dx .+ real(Zb)]'
+    # x = reshape(x, length(x))
+
     return complex.(x, y)
 end
 
@@ -114,12 +123,13 @@ in the vicinity of a root or pole.
 
 Notes:
  - Order of `𝓔` is not guaranteed.
- - `phasediffs` is returned only for diagnosis and plotting. It can be removed without affecting
- this function.
+ - Count of `phasediffs` of value 1 and 3 can differ from Matlab in normal operation,
+ because it depends on "direction" of edge.
+ - `phasediffs` is only needed for diagnosis and plotting.
 """
 function candidateedges(tess::DelaunayTessellation2D{IndexablePoint2D},
                         quadrants::AbstractArray{Int64, 1})
-    phasediffs = Vector{Int64}()
+    # phasediffs = Vector{Int64}()
     𝓔 = Vector{DelaunayEdge}()
     for edge in delaunayedges(tess)
         nodea, nodeb = geta(edge), getb(edge)
@@ -134,32 +144,20 @@ function candidateedges(tess::DelaunayTessellation2D{IndexablePoint2D},
         ΔQ = mod(quadrants[idxa] - quadrants[idxb], 4)
         ΔQ == 2 && push!(𝓔, edge)
 
-        push!(phasediffs, ΔQ)
+        # push!(phasediffs, ΔQ)
     end
-    return 𝓔, phasediffs
+    return 𝓔 #, phasediffs
 end
 
 """
-Select edges with length greater than `tolerance`.
+Return true if `edge` has length greater than `tolerance`.
 """
-function selectedges(edges::AbstractArray{DelaunayEdge,1}, tolerance, geom2fcn)
-    min𝓔length = typemax(Float64)
-    max𝓔length = typemin(Float64)
-    select𝓔 = Vector{DelaunayEdge}()
-    for ii in eachindex(edges)
-        elen = distance(geom2fcn(edges[ii])...)
-        elen > tolerance && push!(select𝓔, edges[ii])
-        if elen > max𝓔length
-            max𝓔length = elen
-        elseif elen < min𝓔length
-            min𝓔length = elen
-        end
-    end
-    return select𝓔, min𝓔length, max𝓔length
+function longedge(edge::DelaunayEdge, tolerance, geom2fcn)
+    distance(geom2fcn(edge)...) > tolerance
 end
 
 """
-Counts how many times each triangle contains a node.
+Counts how many times each triangle contains a node in `edges`.
 """
 function counttriangleswithnodes(tess::DelaunayTessellation2D, edges::AbstractArray{DelaunayEdge,1})
     # Nodes of select edges
@@ -193,9 +191,8 @@ function uniquenodes!(edgenodes, edges::AbstractArray{DelaunayEdge,1})
     nothing
 end
 
-
 """
-Add nodes to `newnodes` in zone 1.
+Add nodes to `newnodes` in zone 1, i.e. triangles that had more than one node in it.
 """
 function zone1newnodes!(newnodes::AbstractArray{IndexablePoint2D,1},
                         triangles::AbstractArray{DelaunayTriangle,1}, geom2fcn, tolerance)
@@ -229,11 +226,10 @@ function addnewnode!(newnodes::AbstractArray{IndexablePoint2D}, node1::Indexable
         for ii in eachindex(newnodes)
             distance(newnodes[ii], avgnode) < 2eps() && return nothing
         end
-        push!(newnodes, avgnode)  # only executed if we haven't returned
+        push!(newnodes, avgnode)  # only executed if we haven't already returned
     end
     nothing
 end
-
 
 """
 Add nodes to `newnodes` in zone 2 (skinny triangles).
@@ -243,9 +239,11 @@ function zone2newnodes!(newnodes, triangles)
         na = geta(triangles[ii])
         nb = getb(triangles[ii])
         nc = getc(triangles[ii])
-        l1 = distance(nb, na)
-        l2 = distance(nc, nb)
-        l3 = distance(na, nc)
+
+        # For skinny triangle check, `geom2fcn` not needed because units cancel out
+        l1 = distance(na, nb)
+        l2 = distance(nb, nc)
+        l3 = distance(nc, na)
         if max(l1,l2,l3)/min(l1,l2,l3) > skinnytriangle
             avgnode = (na+nb+nc)/3
             push!(newnodes, avgnode)
@@ -253,7 +251,6 @@ function zone2newnodes!(newnodes, triangles)
     end
     nothing
 end
-
 
 """
 Find contour edges from all candidate edges.
@@ -283,7 +280,7 @@ function contouredges(tess, edges)
 
     # Remove duplicate (reverse) edges from `tmpedges` and otherwise append to `𝐶`
     𝐶 = Vector{DelaunayEdge}()
-    duplicateedges = zeros(Int64, size(tmpedges, 1))
+    duplicateedges = zeros(Int64, length(tmpedges))
     for (idxa, edgea) in enumerate(tmpedges)
         if duplicateedges[idxa] == 0
             for (idxb, edgeb) in enumerate(tmpedges)
@@ -305,11 +302,14 @@ function contouredges(tess, edges)
 end
 
 """
+Separate triangles by zones.
 """
 function splittriangles(tess, trianglecounts)
     zone1triangles = Vector{DelaunayTriangle}()
     zone2triangles = Vector{DelaunayTriangle}()
-    for (ii, triangle) in enumerate(tess)
+    ii = 0
+    for triangle in tess
+        ii += 1
         if trianglecounts[ii] > 1
             push!(zone1triangles, triangle)
         elseif trianglecounts[ii] == 1
@@ -396,6 +396,7 @@ function rootsandpoles(regions, quadrants, geom2fcn)
     q = Vector{Int64}(undef, numregions)
     z = Vector{ComplexF64}(undef, numregions)
     for ii in eachindex(regions)
+        # XXX: ORDER OF REGIONS??? XXX
         quadrantsequence = [quadrants[getindex(node)] for node in regions[ii]]
         # Sign flip because `regions[ii]` are in opposite order of Matlab
         dQ = -diff(quadrantsequence)
@@ -441,12 +442,14 @@ function tesselate!(tess, newnodes, fcn, geom2fcn, tolerance)
         numnodes += numnewnodes
 
         # Determine candidate edges that may be near a root or pole
-        𝓔, phasediffs = candidateedges(tess, quadrants)
+        𝓔 = candidateedges(tess, quadrants)
         isempty(𝓔) && error("No roots in the domain")
 
         # Select candidate edges that are longer than the chosen tolerance
-        select𝓔, min𝓔length, max𝓔length = selectedges(𝓔, tolerance, geom2fcn)
-        @debug "Candidate edges length min: $min𝓔length, max: $max𝓔length"
+        select𝓔 = filter(e -> longedge(e, tolerance, geom2fcn), 𝓔)
+        isempty(select𝓔) && return tess, 𝓔, quadrants
+        max𝓔length = maximum(distance(p1, p2) for (p1, p2) in geom2fcn.(select𝓔))
+        @debug "Candidate edges length max: $max𝓔length"
         max𝓔length < tolerance && return tess, 𝓔, quadrants
 
         # How many times does each triangle contain a `select𝓔` node?
@@ -467,17 +470,15 @@ function tesselate!(tess, newnodes, fcn, geom2fcn, tolerance)
     return tess, 𝓔, quadrants
 end
 
-
 """
 """
 function main(tess, newnodes, fcn, geom2fcn, tolerance)
     tess, 𝓔, quadrants = tesselate!(tess, newnodes, fcn, geom2fcn, tolerance)
     𝐶 = contouredges(tess, 𝓔)
     regions = evaluateregions!(𝐶, geom2fcn)
-    zroots, zroots_multiplicity, zpoles, zpoles_multiplicity = rootsandpoles(regions, quadrants, e -> geom2fcn(e, ra, rb, ia, ib))
+    zroots, zroots_multiplicity, zpoles, zpoles_multiplicity = rootsandpoles(regions, quadrants, geom2fcn)
 
     return zroots, zroots_multiplicity, zpoles, zpoles_multiplicity
 end
-
 
 # end # module

@@ -41,8 +41,8 @@ geom2fcn(edge::DelaunayEdge, ra, rb, ia, ib) = (geom2fcn(geta(edge), ra, rb, ia,
         c = 3e8
         ω = 2π*f
         k₀ = ω/c
-        c = ϵᵣ^2*(k₀*d)^2*(ϵᵣ*μᵣ - 1)
-        w = ϵᵣ^2*z^2 + z^2*tan(z)^2 - c
+        cc = ϵᵣ^2*(k₀*d)^2*(ϵᵣ*μᵣ - 1)
+        w = ϵᵣ^2*z^2 + z^2*tan(z)^2 - cc
     end
     testfunction(z::AbstractArray) = [testfunction(zz) for zz in z]
 
@@ -58,7 +58,6 @@ geom2fcn(edge::DelaunayEdge, ra, rb, ia, ib) = (geom2fcn(geta(edge), ra, rb, ia,
 
     tolerance = 1e-9
     skinnytriangle = 3
-
 
     rmin, rmax = minimum(real(origcoords)), maximum(real(origcoords))
     imin, imax = minimum(imag(origcoords)), maximum(imag(origcoords))
@@ -107,15 +106,18 @@ geom2fcn(edge::DelaunayEdge, ra, rb, ia, ib) = (geom2fcn(geta(edge), ra, rb, ia,
 
     @test matlab𝓔 == testedges
 
-    select𝓔, min𝓔length, max𝓔length = selectedges(𝓔, tolerance,
-                                                  e -> geom2fcn(e, ra, rb, ia, ib))
+    select𝓔 = selectedges(𝓔, tolerance, e -> geom2fcn(e, ra, rb, ia, ib))
+    newE = filter(e -> distance(geom2fcn(e, ra, rb, ia, ib)...) > tolerance, 𝓔)
+
+    tttfcn(e) = distance(geom2fcn(e, ra, rb, ia, ib)...) > tolerance
+    select𝓔 = filter(tttfcn, 𝓔)
 
     testedges = sort([getindex.(geta.(select𝓔)) getindex.(getb.(select𝓔))], dims=2)
     testedges = sort(testedges, dims=1, by=x->x[1])
 
     @test matlab𝓔 == testedges  # In first loop, they're the same
-    @test min𝓔length ≈ 0.19436506316151
-    @test max𝓔length ≈ 0.20000000000000
+    @test minimum(select𝓔) ≈ 0.19436506316151
+    @test maximum(select𝓔) ≈ 0.20000000000000
 
     trianglecounts = counttriangleswithnodes(tess, select𝓔)
 
@@ -124,19 +126,27 @@ geom2fcn(edge::DelaunayEdge, ra, rb, ia, ib) = (geom2fcn(geta(edge), ra, rb, ia,
     @test maximum(trianglecounts) == 3
     @test sum(trianglecounts) == 84
 
-    zone1triangles = [tr for (idx, tr) in enumerate(tess) if trianglecounts[idx] > 1]
-    zone1count = length(zone1triangles)
-    @test zone1count == 20
+    zone1triangles, zone2triangles = splittriangles(tess, trianglecounts)
+
+    # zone1triangles = [tr for (idx, tr) in enumerate(tess) if trianglecounts[idx] > 1]
+    # zone1count = length(zone1triangles)
+    # @test zone1count == 20
 
     newnodes = Vector{IndexablePoint2D}()
-    zone1newnodes!(newnodes, zone1triangles, e -> geom2fcn(e, ra, rb, ia, ib))
+    zone1newnodes!(newnodes, zone1triangles, e -> geom2fcn(e, ra, rb, ia, ib), tolerance)
     @test length(newnodes) == 42
 
-    zone2triangles = [tr for (idx, tr) in enumerate(tess) if trianglecounts[idx] == 1]
-    @test length(zone2triangles) == 40
+    # zone2triangles = [tr for (idx, tr) in enumerate(tess) if trianglecounts[idx] == 1]
+    # @test length(zone2triangles) == 40
 
     zone2newnodes!(newnodes, zone2triangles)
     @test length(newnodes) == 42
+
+    𝐶 = contouredges(tess, 𝓔)
+
+    regions = evaluateregions!(𝐶, geom2fcn)
+
+    zroots, zroots_multiplicity, zpoles, zpoles_multiplicity = rootsandpoles(regions, quadrants, e -> geom2fcn(e, ra, rb, ia, ib))
 end
 
 
