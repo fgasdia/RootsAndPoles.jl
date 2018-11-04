@@ -4,15 +4,18 @@
 A Julia implementation of the GRPF [Matlab code](https://github.com/PioKow/GRPF) by Piotr
 Kowalczyk.
 """
-# module GRPF
+module GRPF
 
 using LinearAlgebra
 using Statistics
 using StaticArrays
 import GeometricalPredicates: intriangle
 using VoronoiDelaunay
+
 include("VoronoiDelaunayExtensions.jl")
 include("GeneralFunctions.jl")
+
+export IndexablePoint2D
 
 const maxiterations = 100
 const maxnodes = 500000
@@ -95,7 +98,7 @@ function quadrant(val::ComplexF64)
     elseif (real(val) >= 0) & (imag(val) < 0)
         quad = 4
     else
-        error("Function value cannot be assigned to quadrant.")
+        error("Function value $val cannot be assigned to quadrant.")
     end
 end
 
@@ -129,7 +132,7 @@ Notes:
 """
 function candidateedges(tess::DelaunayTessellation2D{IndexablePoint2D},
                         quadrants::AbstractArray{Int64, 1})
-    # phasediffs = Vector{Int64}()
+    phasediffs = Vector{Int64}()
     𝓔 = Vector{DelaunayEdge}()
     for edge in delaunayedges(tess)
         nodea, nodeb = geta(edge), getb(edge)
@@ -137,16 +140,16 @@ function candidateedges(tess::DelaunayTessellation2D{IndexablePoint2D},
 
         # To match Matlab, force `idxa` < `idxb`
         # (order doesn't matter for `ΔQ == 2`, which is the only case we care about)
-        # if idxa > idxb
-        #     idxa, idxb = idxb, idxa
-        # end
+        if idxa > idxb
+            idxa, idxb = idxb, idxa
+        end
 
         ΔQ = mod(quadrants[idxa] - quadrants[idxb], 4)
         ΔQ == 2 && push!(𝓔, edge)
 
-        # push!(phasediffs, ΔQ)
+        push!(phasediffs, ΔQ)
     end
-    return 𝓔 #, phasediffs
+    return 𝓔, phasediffs
 end
 
 """
@@ -393,20 +396,20 @@ end
 """
 function rootsandpoles(regions, quadrants, geom2fcn)
     numregions = size(regions, 1)
-    q = Vector{Int64}(undef, numregions)
+    q = Vector{Union{Missing, Int64}}(undef, numregions)
     z = Vector{ComplexF64}(undef, numregions)
     for ii in eachindex(regions)
         # XXX: ORDER OF REGIONS??? XXX
         quadrantsequence = [quadrants[getindex(node)] for node in regions[ii]]
-        # Sign flip because `regions[ii]` are in opposite order of Matlab
+        # Sign flip because `regions[ii]` are in opposite order of Matlab??
         dQ = -diff(quadrantsequence)
         for jj in eachindex(dQ)
             dQ[jj] == 3 && (dQ[jj] = -1)
             dQ[jj] == -3 && (dQ[jj] = 1)
             # ``|ΔQ| = 2`` is ambiguous; cannot tell whether phase increases or decreases by two quadrants
-            abs(dQ[jj]) == 2 && (dQ[jj] = NaN)
+            abs(dQ[jj]) == 2 && (dQ[jj] = 0)
         end
-        q[ii] = sum(dQ)/4
+        q[ii] = sum(dQ)/4  # TODO: What does matlab do when this isn't an integer?
         z[ii] = mean(geom2fcn.(regions[ii]))
     end
     zroots = [z[i] for i in eachindex(z) if q[i] > 0]
@@ -431,6 +434,7 @@ function tesselate!(tess, newnodes, fcn, geom2fcn, tolerance)
     iteration = 0
     while (iteration < maxiterations) & (numnodes < maxnodes)
         iteration += 1
+        @show iteration
 
         # Determine which quadrant function value belongs at each node
         numnewnodes = length(newnodes)
@@ -442,15 +446,15 @@ function tesselate!(tess, newnodes, fcn, geom2fcn, tolerance)
         numnodes += numnewnodes
 
         # Determine candidate edges that may be near a root or pole
-        𝓔 = candidateedges(tess, quadrants)
+        𝓔, phasediffs = candidateedges(tess, quadrants)
         isempty(𝓔) && error("No roots in the domain")
 
         # Select candidate edges that are longer than the chosen tolerance
         select𝓔 = filter(e -> longedge(e, tolerance, geom2fcn), 𝓔)
-        isempty(select𝓔) && return tess, 𝓔, quadrants
+        isempty(select𝓔) && return tess, 𝓔, quadrants, phasediffs
         max𝓔length = maximum(distance(p1, p2) for (p1, p2) in geom2fcn.(select𝓔))
         @debug "Candidate edges length max: $max𝓔length"
-        max𝓔length < tolerance && return tess, 𝓔, quadrants
+        max𝓔length < tolerance && return tess, 𝓔, quadrants, phasediffs
 
         # How many times does each triangle contain a `select𝓔` node?
         trianglecounts = counttriangleswithnodes(tess, select𝓔)
@@ -467,7 +471,7 @@ function tesselate!(tess, newnodes, fcn, geom2fcn, tolerance)
         setindex!.(newnodes, (1:length(newnodes)).+numnodes)
     end
 
-    return tess, 𝓔, quadrants
+    return tess, 𝓔, quadrants, phasediffs
 end
 
 """
@@ -481,4 +485,4 @@ function main(tess, newnodes, fcn, geom2fcn, tolerance)
     return zroots, zroots_multiplicity, zpoles, zpoles_multiplicity
 end
 
-# end # module
+end # module
