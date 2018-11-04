@@ -1,3 +1,5 @@
+__precompile__()
+
 """
 # GRPF: Global complex Roots and Poles Finding algorithm
 
@@ -28,7 +30,7 @@ Generate initial mesh node coordinates for a rectangular domain ∈ {`Zb` to `Ze
 
 See also: `rect_dom.m`
 """
-function rectangulardomain(Zb, Ze, Δr)
+function rectangulardomain(Zb::Complex, Ze::Complex, Δr)
     X = real(Ze) - real(Zb)
     Y = imag(Ze) - imag(Zb)
 
@@ -69,7 +71,7 @@ See also: `disk_dom.m`
 """
 function diskdomain(R, Δr)
     h = Δr*sqrt(3)/2
-    n = 1 + round(Int64, R/h)
+    n = 1 + round(Int, R/h)
     Rn = (1:n)*R/n
     newnodes = [complex(0.0)]
     f₀ = 0.
@@ -84,12 +86,14 @@ function diskdomain(R, Δr)
     return newnodes
 end
 
+
+
 """
 Converts complex function value `val` to quadrant number.
 
 See also: `vinq.m`
 """
-function quadrant(val::ComplexF64)
+function quadrant(val::Complex)::UInt8
     if (real(val) > 0) & (imag(val) >= 0)
         quad = 1
     elseif (real(val) <= 0) & (imag(val) > 0)
@@ -108,10 +112,10 @@ Evaluate function `fcn` for [`quadrant`](@ref) at `nodes` and fill `quadrants`.
 
 `quadrants` is a Vector{} where each index corresponds to `node` index.
 """
-function assignquadrants!(quadrants::AbstractArray{Int64, 1},
-                          nodes::AbstractArray{IndexablePoint2D,1}, fcn)
+function assignquadrants!(quadrants::Vector{UInt8},
+                          nodes::Vector{IndexablePoint2D}, fcn::Function)
     for ii in eachindex(nodes)
-        val = fcn(nodes[ii])
+        val = fcn(nodes[ii])::ComplexF64  # TODO: known return type
         quadrants[getindex(nodes[ii])] = quadrant(val)
     end
     nothing
@@ -132,11 +136,14 @@ Notes:
  - `phasediffs` is only needed for diagnosis and plotting.
 """
 function candidateedges(tess::DelaunayTessellation2D{IndexablePoint2D},
-                        quadrants::AbstractArray{Int64, 1})
-    phasediffs = Vector{Int64}()
-    𝓔 = Vector{DelaunayEdge}()
-    for edge in delaunayedges(tess)
-        nodea, nodeb = geta(edge), getb(edge)
+                        quadrants::Vector{UInt8})
+    phasediffs = Vector{UInt8}()
+    𝓔 = Vector{DelaunayEdge{IndexablePoint2D}}()
+
+    edgeiter = delaunayedges(tess)
+    for edge in edgeiter
+        e::DelaunayEdge{IndexablePoint2D} = edge  # TODO: infer edge type
+        nodea, nodeb = geta(e), getb(e)
         idxa, idxb = getindex(nodea), getindex(nodeb)
 
         # To match Matlab, force `idxa` < `idxb`
@@ -146,7 +153,7 @@ function candidateedges(tess::DelaunayTessellation2D{IndexablePoint2D},
         end
 
         ΔQ = mod(quadrants[idxa] - quadrants[idxb], 4)
-        ΔQ == 2 && push!(𝓔, edge)
+        ΔQ == 2 && push!(𝓔, e)
 
         push!(phasediffs, ΔQ)
     end
@@ -156,12 +163,12 @@ end
 """
 Counts how many times each triangle contains a node in `edges`.
 """
-function counttriangleswithnodes(tess::DelaunayTessellation2D, edges::AbstractArray{DelaunayEdge,1})
+function counttriangleswithnodes(tess::DelaunayTessellation2D{IndexablePoint2D}, edges::Vector{DelaunayEdge{IndexablePoint2D}})
     # Nodes of select edges
     edgenodes = Vector{IndexablePoint2D}()
     uniquenodes!(edgenodes, edges)
 
-    trianglecounts = zeros(Int64, count(.!isexternal.(tess._trigs)))
+    trianglecounts = zeros(Int, count(.!isexternal.(tess._trigs)))
     triidx = 0
     for triangle in tess
         triidx += 1
@@ -177,7 +184,7 @@ function counttriangleswithnodes(tess::DelaunayTessellation2D, edges::AbstractAr
     end
     return trianglecounts
 end
-function uniquenodes!(edgenodes, edges::AbstractArray{DelaunayEdge,1})
+function uniquenodes!(edgenodes::Vector{IndexablePoint2D}, edges::Vector{DelaunayEdge{IndexablePoint2D}})
     for ii in eachindex(edges)
         nodea = geta(edges[ii])
         nodeb = getb(edges[ii])
@@ -191,10 +198,11 @@ end
 """
 Add nodes to `newnodes` in zone 1, i.e. triangles that had more than one node.
 """
-function zone1newnodes!(newnodes::AbstractArray{IndexablePoint2D,1},
-                        triangles::AbstractArray{DelaunayTriangle,1}, geom2fcn, tolerance)
-    n1a = geta(triangles[1])
-    n1b = getb(triangles[1])
+function zone1newnodes!(newnodes::Vector{IndexablePoint2D},
+                        triangles::Vector{DelaunayTriangle{IndexablePoint2D}}, geom2fcn::Function, tolerance)
+    triangle1 = triangles[1]
+    n1a = geta(triangle1)
+    n1b = getb(triangle1)
     push!(newnodes, (n1a+n1b)/2)
     for ii = 1:length(triangles)-1
         na = geta(triangles[ii])
@@ -216,8 +224,8 @@ function zone1newnodes!(newnodes::AbstractArray{IndexablePoint2D,1},
 
     nothing
 end
-function addnewnode!(newnodes::AbstractArray{IndexablePoint2D}, node1::IndexablePoint2D,
-                     node2::IndexablePoint2D, geom2fcn, tolerance)
+function addnewnode!(newnodes::Vector{IndexablePoint2D}, node1::IndexablePoint2D,
+                     node2::IndexablePoint2D, geom2fcn::Function, tolerance)
     if distance(geom2fcn(node1), geom2fcn(node2)) > tolerance
         avgnode = (node1+node2)/2
         for ii in eachindex(newnodes)
@@ -231,11 +239,12 @@ end
 """
 Add nodes to `newnodes` in zone 2 (skinny triangles).
 """
-function zone2newnodes!(newnodes, triangles)
+function zone2newnodes!(newnodes::Vector{IndexablePoint2D}, triangles::Vector{DelaunayTriangle{IndexablePoint2D}})
     for ii in eachindex(triangles)
-        na = geta(triangles[ii])
-        nb = getb(triangles[ii])
-        nc = getc(triangles[ii])
+        triangle = triangles[ii]::DelaunayTriangle{IndexablePoint2D}
+        na = geta(triangle)
+        nb = getb(triangle)
+        nc = getc(triangle)
 
         # For skinny triangle check, `geom2fcn` not needed because units cancel out
         l1 = distance(na, nb)
@@ -252,9 +261,9 @@ end
 """
 Find contour edges from all candidate edges.
 """
-function contouredges(tess, edges)
+function contouredges(tess::DelaunayTessellation2D{IndexablePoint2D}, edges::Vector{DelaunayEdge{IndexablePoint2D}})
     # Edges of triangles that contain at least 1 of `edges`
-    tmpedges = Vector{DelaunayEdge}()
+    tmpedges = Vector{DelaunayEdge{IndexablePoint2D}}()
     for triangle in tess
         # We don't know which "direction" the edges are defined in the triangle,
         # so we need to test both
@@ -276,8 +285,8 @@ function contouredges(tess, edges)
     end
 
     # Remove duplicate (reverse) edges from `tmpedges` and otherwise append to `𝐶`
-    𝐶 = Vector{DelaunayEdge}()
-    duplicateedges = zeros(Int64, length(tmpedges))
+    𝐶 = Vector{DelaunayEdge{IndexablePoint2D}}()
+    duplicateedges = zeros(Int, length(tmpedges))
     for (idxa, edgea) in enumerate(tmpedges)
         if duplicateedges[idxa] == 0
             for (idxb, edgeb) in enumerate(tmpedges)
@@ -301,9 +310,9 @@ end
 """
 Separate triangles by zones.
 """
-function splittriangles(tess, trianglecounts)
-    zone1triangles = Vector{DelaunayTriangle}()
-    zone2triangles = Vector{DelaunayTriangle}()
+function splittriangles(tess::DelaunayTessellation2D{IndexablePoint2D}, trianglecounts::Vector{Int})
+    zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
+    zone2triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
     ii = 0
     for triangle in tess
         ii += 1
@@ -322,7 +331,8 @@ the reference) is picked from the fixed set of nodes.
 
 See also: `FindNextNode.m`
 """
-function findnextnode(prevnode, refnode, tempnodes, geom2fcn)
+function findnextnode(prevnode::IndexablePoint2D, refnode::IndexablePoint2D,
+                      tempnodes::Vector{IndexablePoint2D}, geom2fcn::Function)
     P = geom2fcn(prevnode)
     S = geom2fcn(refnode)
     N = geom2fcn.(tempnodes)
@@ -348,7 +358,7 @@ and don't pop at all
 
 # Note: The nodes of each region are in reverse order compared to Matlab wrt their quadrants?
 """
-function evaluateregions!(𝐶, geom2fcn)
+function evaluateregions!(𝐶::Vector{DelaunayEdge{IndexablePoint2D}}, geom2fcn::Function)
     # Initialize
     numregions = 1
 
@@ -388,13 +398,13 @@ end
 
 """
 """
-function rootsandpoles(regions, quadrants, geom2fcn)
+function rootsandpoles(regions::Vector{Vector{IndexablePoint2D}}, quadrants::Vector{UInt8}, geom2fcn::Function)
     numregions = size(regions, 1)
-    q = Vector{Union{Missing, Int64}}(undef, numregions)
+    q = Vector{Union{Missing, Int}}(undef, numregions)
     z = Vector{ComplexF64}(undef, numregions)
     for ii in eachindex(regions)
         # XXX: ORDER OF REGIONS??? XXX
-        quadrantsequence = [quadrants[getindex(node)] for node in regions[ii]]
+        quadrantsequence = [convert(Int8, quadrants[getindex(node)]) for node in regions[ii]]
         # Sign flip because `regions[ii]` are in opposite order of Matlab??
         dQ = -diff(quadrantsequence)
         for jj in eachindex(dQ)
@@ -403,7 +413,7 @@ function rootsandpoles(regions, quadrants, geom2fcn)
             # ``|ΔQ| = 2`` is ambiguous; cannot tell whether phase increases or decreases by two quadrants
             abs(dQ[jj]) == 2 && (dQ[jj] = 0)
         end
-        q[ii] = sum(dQ)/4  # TODO: What does matlab do when this isn't an integer?
+        q[ii] = sum(dQ)/4
         z[ii] = mean(geom2fcn.(regions[ii]))
     end
     zroots = [z[i] for i in eachindex(z) if q[i] > 0]
@@ -417,13 +427,14 @@ end
 
 """
 """
-function tesselate!(tess, newnodes, fcn, geom2fcn, tolerance)
+function tesselate!(tess::DelaunayTessellation2D{IndexablePoint2D}, newnodes::Vector{IndexablePoint2D},
+                    fcn::Function, geom2fcn::Function, tolerance)
     # Initialize
     numnodes = tess._total_points_added
     @assert numnodes == 0
 
-    𝓔 = Vector{DelaunayEdge}()
-    quadrants = Vector{Int64}()
+    𝓔 = Vector{DelaunayEdge{IndexablePoint2D}}()
+    quadrants = Vector{UInt8}()
 
     iteration = 0
     while (iteration < maxiterations) & (numnodes < maxnodes)
@@ -431,7 +442,7 @@ function tesselate!(tess, newnodes, fcn, geom2fcn, tolerance)
 
         # Determine which quadrant function value belongs at each node
         numnewnodes = length(newnodes)
-        append!(quadrants, Vector{Int64}(undef, numnewnodes))
+        append!(quadrants, Vector{UInt8}(undef, numnewnodes))
         assignquadrants!(quadrants, newnodes, fcn)
 
         # Add new nodes to `tess`
@@ -469,7 +480,8 @@ end
 
 """
 """
-function grpf(tess, newnodes, fcn, geom2fcn, tolerance)
+function grpf(tess::DelaunayTessellation2D{IndexablePoint2D}, newnodes::Vector{IndexablePoint2D},
+              fcn::Function, geom2fcn::Function, tolerance)
     tess, 𝓔, quadrants = tesselate!(tess, newnodes, fcn, geom2fcn, tolerance)
     𝐶 = contouredges(tess, 𝓔)
     regions = evaluateregions!(𝐶, geom2fcn)

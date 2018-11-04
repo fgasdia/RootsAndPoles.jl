@@ -19,10 +19,10 @@ Linearly map geometry values ∈ {`min_coord`, `max_coord`} to domain bounds.
 
 Also, there are floating point imprecisions when converting back and forth.
 """
-function geom2fcn(pt::AbstractPoint2D, ra, rb, ia, ib)
+function geom2fcn(pt::IndexablePoint2D, ra, rb, ia, ib)
     complex((getx(pt) - rb)/ra, (gety(pt) - ib)/ia)
 end
-geom2fcn(edge::VoronoiDelaunay.DelaunayEdge, ra, rb, ia, ib) = (geom2fcn(geta(edge), ra, rb, ia, ib), geom2fcn(getb(edge), ra, rb, ia, ib))
+geom2fcn(edge::VoronoiDelaunay.DelaunayEdge{IndexablePoint2D}, ra, rb, ia, ib) = (geom2fcn(geta(edge), ra, rb, ia, ib), geom2fcn(getb(edge), ra, rb, ia, ib))
 
 @time @testset "Simple Rational Function" begin include("SimpleRationalFunction.jl") end
 @time @testset "Complex Modes" begin include("ComplexModes.jl") end

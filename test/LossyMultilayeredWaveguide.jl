@@ -41,7 +41,7 @@ newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in 
 tess = DelaunayTessellation2D{IndexablePoint2D}(5000)
 
 tess, 𝓔, quadrants = GRPF.tesselate!(tess, newnodes, pt -> wvgd(geom2fcn(pt, ra, rb, ia, ib)),
-                                 e -> geom2fcn(e, ra, rb, ia, ib), tolerance)
+                                     e -> geom2fcn(e, ra, rb, ia, ib), tolerance)
 
 𝐶 = GRPF.contouredges(tess, 𝓔)
 regions = GRPF.evaluateregions!(𝐶, e -> geom2fcn(e, ra, rb, ia, ib))
