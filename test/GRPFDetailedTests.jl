@@ -359,6 +359,15 @@ end
 
 
 
+println("zroots: ")
+display(zroots)
+println("\nzpoles: ")
+display(zpoles)
+println()
+
+
+
+
 @testset "Complex Modes" begin
     function complexmodes(z)
         z *= 10

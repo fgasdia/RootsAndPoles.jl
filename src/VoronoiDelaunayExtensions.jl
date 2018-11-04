@@ -2,6 +2,8 @@ import Base
 using VoronoiDelaunay
 import VoronoiDelaunay: getx, gety, DelaunayEdge, DelaunayTriangle
 
+export IndexablePoint2D
+
 mutable struct IndexablePoint2D <: AbstractPoint2D
     _x::Float64
     _y::Float64

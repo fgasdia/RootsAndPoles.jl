@@ -2,7 +2,8 @@
 # GRPF: Global complex Roots and Poles Finding algorithm
 
 A Julia implementation of the GRPF [Matlab code](https://github.com/PioKow/GRPF) by Piotr
-Kowalczyk.
+Kowalczyk. Matlab files (`.m`) listed in _see also_ sections of function doc strings refer
+to this git repo.
 """
 module GRPF
 
@@ -15,7 +16,7 @@ using VoronoiDelaunay
 include("VoronoiDelaunayExtensions.jl")
 include("GeneralFunctions.jl")
 
-export IndexablePoint2D
+export rectangulardomain, diskdomain, grpf
 
 const maxiterations = 100
 const maxnodes = 500000
@@ -153,13 +154,6 @@ function candidateedges(tess::DelaunayTessellation2D{IndexablePoint2D},
 end
 
 """
-Return true if `edge` has length greater than `tolerance`.
-"""
-function longedge(edge::DelaunayEdge, tolerance, geom2fcn)
-    distance(geom2fcn(edge)...) > tolerance
-end
-
-"""
 Counts how many times each triangle contains a node in `edges`.
 """
 function counttriangleswithnodes(tess::DelaunayTessellation2D, edges::AbstractArray{DelaunayEdge,1})
@@ -195,7 +189,7 @@ function uniquenodes!(edgenodes, edges::AbstractArray{DelaunayEdge,1})
 end
 
 """
-Add nodes to `newnodes` in zone 1, i.e. triangles that had more than one node in it.
+Add nodes to `newnodes` in zone 1, i.e. triangles that had more than one node.
 """
 function zone1newnodes!(newnodes::AbstractArray{IndexablePoint2D,1},
                         triangles::AbstractArray{DelaunayTriangle,1}, geom2fcn, tolerance)
@@ -434,7 +428,6 @@ function tesselate!(tess, newnodes, fcn, geom2fcn, tolerance)
     iteration = 0
     while (iteration < maxiterations) & (numnodes < maxnodes)
         iteration += 1
-        @show iteration
 
         # Determine which quadrant function value belongs at each node
         numnewnodes = length(newnodes)
@@ -476,7 +469,7 @@ end
 
 """
 """
-function main(tess, newnodes, fcn, geom2fcn, tolerance)
+function grpf(tess, newnodes, fcn, geom2fcn, tolerance)
     tess, 𝓔, quadrants = tesselate!(tess, newnodes, fcn, geom2fcn, tolerance)
     𝐶 = contouredges(tess, 𝓔)
     regions = evaluateregions!(𝐶, geom2fcn)
