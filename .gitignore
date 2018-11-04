@@ -4,4 +4,4 @@ fvals2\.csv
 newnodes1\.csv
 newnodes2\.csv
 graphenefunction\.svg
-test\GRPFDetailedTests.jl
+test/GRPFDetailedTests.jl
