@@ -5,8 +5,6 @@ using VoronoiDelaunay
 
 using GRPF
 
-# TODO: Order output?
-
 """
     mapfunctionval(z, ra, rb, ia, ib)
 

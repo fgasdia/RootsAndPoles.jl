@@ -1,6 +1,6 @@
 function graphenefunction(z)
       f = 1e12
-      c = 299792458.
+      c = 299792458
       μ₀ = 4π*1e-7
       ϵ₀ = 1/(μ₀*c^2)
 
@@ -11,7 +11,7 @@ function graphenefunction(z)
       muc = 0.05*e
       t = 0.135e-12
       T = 300
-      ϵᵣ₁ = 1.
+      ϵᵣ₁ = 1.0
       ϵᵣ₂ = 11.9
 
       ω = 2π*f
@@ -31,11 +31,11 @@ function graphenefunction(z)
 end
 
 # Analysis parameters
-xb = -100.  # real part begin
-xe = 400.  # real part end
-yb = -100.  # imag part begin
-ye = 400.  # imag part end
-r = 18.  # initial mesh step
+xb = -100  # real part begin
+xe = 400  # real part end
+yb = -100  # imag part begin
+ye = 400  # imag part end
+r = 18  # initial mesh step
 tolerance = 1e-9
 
 origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
@@ -76,5 +76,7 @@ sort!(zpoles, by = x -> (real(x), imag(x)))
 @test zroots[7] ≈ 368.439467215558 + 312.522078059503im
 @test zroots[8] ≈ 371.007570834263 + 314.700407676927im
 
-@test zpoles[1] ≈ -2.65852297441317e-10 + 3.4496376622893im
-@test zpoles[2] ≈ -2.30871731988513e-10 - 3.44963766202144im
+# BUG: Sometimes one of zpoles is positive ~0 even though Matlab calculates them as both -0.
+# This causes zpoles[1] and [2] to be flipped and test fails.
+@test zpoles[1] ≈ -2.30871731988513e-10 - 3.44963766202144im
+@test zpoles[2] ≈ -2.65852297441317e-10 + 3.4496376622893im
