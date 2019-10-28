@@ -20,9 +20,12 @@ include("GeneralFunctions.jl")
 
 export rectangulardomain, diskdomain, grpf
 
-const maxiterations = 100
-const maxnodes = 500000
-const skinnytriangle = 3
+const MAXITERATIONS = 100
+const MAXNODES = 500000
+const SKINNYTRIANGLE = 3
+
+# To activate debugging within this file: (requires reloading this module)
+# ENV["JULIA_DEBUG"] = "GRPF"
 
 """
     quadrant(val)
@@ -31,17 +34,17 @@ Convert complex function value `val` to quadrant number.
 
 See also: `vinq.m`
 """
-function quadrant(val::Complex)::UInt8
-    if (real(val) > 0) & (imag(val) >= 0)
+@inline function quadrant(val::Complex)::Int8
+    rv, iv = reim(val)
+    if (rv > 0) & (iv >= 0)
         return 1
-    elseif (real(val) <= 0) & (imag(val) > 0)
+    elseif (rv <= 0) & (iv > 0)
         return 2
-    elseif (real(val) < 0) & (imag(val) <= 0)
+    elseif (rv < 0) & (iv <= 0)
         return 3
-    elseif (real(val) >= 0) & (imag(val) < 0)
+    elseif (rv >= 0) & (iv < 0)
         return 4
     else
-        # val = 0?
         error("Function value $val cannot be assigned to quadrant.")
     end
 end
@@ -53,11 +56,11 @@ Evaluate `fcn` for [`quadrant`](@ref) at `nodes` and fill `quadrants`.
 
 `quadrants` is a Vector{} where each index corresponds to `node` index.
 """
-function assignquadrants!(quadrants::Vector{UInt8},
+function assignquadrants!(quadrants::Vector{Int8},
                           nodes::Vector{IndexablePoint2D}, fcn::Function)
-    for ii in eachindex(nodes)
-        val = complex(fcn(nodes[ii]))
-        quadrants[getindex(nodes[ii])] = quadrant(val)
+    @inbounds for ii in eachindex(nodes)
+        val = fcn(nodes[ii])  # TODO: `val` is of Any type
+        quadrants[getindex(nodes[ii])] = quadrant(complex(val))
     end
     nothing
 end
@@ -76,34 +79,35 @@ Notes:
  - Order of `𝓔` is not guaranteed.
  - Count of `phasediffs` of value 1 and 3 can differ from Matlab in normal operation,
  because it depends on "direction" of edge.
- - `phasediffs` is only needed for diagnosis and plotting.
 """
 function candidateedges(
     tess::DelaunayTessellation2D{IndexablePoint2D},
-    quadrants::Vector{UInt8}
+    quadrants::Vector{Int8}
     )
 
-    phasediffs = Vector{UInt8}()
+    # `phasediffs` for diagnosis and plotting only
+    @debug phasediffs = Vector{Int8}()
     𝓔 = Vector{DelaunayEdge{IndexablePoint2D}}()
 
-    edgeiter = delaunayedges(tess)
-    for edge in edgeiter
+    for edge in delaunayedges(tess)
         e::DelaunayEdge{IndexablePoint2D} = edge  # TODO: infer edge type
         nodea, nodeb = geta(e), getb(e)
         idxa, idxb = getindex(nodea), getindex(nodeb)
 
-        # To match Matlab, force `idxa` < `idxb`
+        # NOTE: To match Matlab, force `idxa` < `idxb`
         # (order doesn't matter for `ΔQ == 2`, which is the only case we care about)
-        if idxa > idxb
-            idxa, idxb = idxb, idxa
-        end
+        # if idxa > idxb
+        #     idxa, idxb = idxb, idxa
+        # end
 
         ΔQ = mod(quadrants[idxa] - quadrants[idxb], 4)
         ΔQ == 2 && push!(𝓔, e)
 
-        push!(phasediffs, ΔQ)
+        @debug push!(phasediffs, ΔQ)
     end
-    return 𝓔, phasediffs
+
+    @debug return 𝓔, phasediffs
+    return 𝓔
 end
 
 """
@@ -224,7 +228,7 @@ function zone2newnodes!(
         l1 = distance(na, nb)
         l2 = distance(nb, nc)
         l3 = distance(nc, na)
-        if max(l1,l2,l3)/min(l1,l2,l3) > skinnytriangle
+        if max(l1,l2,l3)/min(l1,l2,l3) > SKINNYTRIANGLE
             avgnode = (na+nb+nc)/3
             push!(newnodes, avgnode)
         end
@@ -400,7 +404,7 @@ end
 """
 function rootsandpoles(
     regions::Vector{Vector{IndexablePoint2D}},
-    quadrants::Vector{UInt8},
+    quadrants::Vector{Int8},
     geom2fcn::Function
     )
 
@@ -443,18 +447,18 @@ function tesselate!(
 
     # Initialize
     numnodes = tess._total_points_added
-    @assert numnodes == 0
+    # @assert numnodes == 0
 
     𝓔 = Vector{DelaunayEdge{IndexablePoint2D}}()
-    quadrants = Vector{UInt8}()
+    quadrants = Vector{Int8}()
 
     iteration = 0
-    while (iteration < maxiterations) & (numnodes < maxnodes)
+    while (iteration < MAXITERATIONS) && (numnodes < MAXNODES)
         iteration += 1
 
         # Determine which quadrant function value belongs at each node
         numnewnodes = length(newnodes)
-        append!(quadrants, Vector{UInt8}(undef, numnewnodes))
+        append!(quadrants, Vector{Int8}(undef, numnewnodes))
         assignquadrants!(quadrants, newnodes, fcn)
 
         # Add new nodes to `tess`
@@ -462,15 +466,22 @@ function tesselate!(
         numnodes += numnewnodes
 
         # Determine candidate edges that may be near a root or pole
-        𝓔, phasediffs = candidateedges(tess, quadrants)
+        @debug 𝓔, phasediffs = candidateedges(tess, quadrants)
+        𝓔 = candidateedges(tess, quadrants)
         isempty(𝓔) && error("No roots in the domain")
 
         # Select candidate edges that are longer than the chosen tolerance
         select𝓔 = filter(e -> longedge(e, tolerance, geom2fcn), 𝓔)
-        isempty(select𝓔) && return tess, 𝓔, quadrants, phasediffs
-        max𝓔length = maximum(distance(p1, p2) for (p1, p2) in geom2fcn.(select𝓔))
-        @debug "Candidate edges length max: $max𝓔length"
-        max𝓔length < tolerance && return tess, 𝓔, quadrants, phasediffs
+        @debug isempty(select𝓔) && return tess, 𝓔, quadrants, phasediffs
+        isempty(select𝓔) && return tess, 𝓔, quadrants
+
+        max𝓔length = maximum(distance(geom2fcn(e)) for e in select𝓔)
+
+        @debug begin
+            "Candidate edges length max: $max𝓔length"
+            max𝓔length < tolerance && return tess, 𝓔, quadrants, phasediffs
+        end
+        max𝓔length < tolerance && return tess, 𝓔, quadrants
 
         # How many times does each triangle contain a `select𝓔` node?
         trianglecounts = counttriangleswithnodes(tess, select𝓔)
@@ -487,7 +498,8 @@ function tesselate!(
         setindex!.(newnodes, (1:length(newnodes)).+numnodes)
     end
 
-    return tess, 𝓔, quadrants, phasediffs
+    @debug return tess, 𝓔, quadrants, phasediffs
+    return tess, 𝓔, quadrants
 end
 
 """

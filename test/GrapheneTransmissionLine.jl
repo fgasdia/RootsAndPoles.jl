@@ -54,7 +54,7 @@ newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in 
 tess = DelaunayTessellation2D{IndexablePoint2D}(2000)
 
 tess, 𝓔, quadrants = GRPF.tesselate!(tess, newnodes, pt -> graphenefunction(geom2fcn(pt, ra, rb, ia, ib)),
-                                 e -> geom2fcn(e, ra, rb, ia, ib), tolerance)
+                                     e -> geom2fcn(e, ra, rb, ia, ib), tolerance)
 
 𝐶 = GRPF.contouredges(tess, 𝓔)
 regions = GRPF.evaluateregions!(𝐶, e -> geom2fcn(e, ra, rb, ia, ib))
@@ -76,7 +76,12 @@ sort!(zpoles, by = x -> (real(x), imag(x)))
 @test zroots[7] ≈ 368.439467215558 + 312.522078059503im
 @test zroots[8] ≈ 371.007570834263 + 314.700407676927im
 
-# BUG: Sometimes one of zpoles is positive ~0 even though Matlab calculates them as both -0.
+# BUG: Sometimes one of zpoles is ~+0 even though Matlab calculates them as both ~-0.
 # This causes zpoles[1] and [2] to be flipped and test fails.
-@test zpoles[1] ≈ -2.30871731988513e-10 - 3.44963766202144im
-@test zpoles[2] ≈ -2.65852297441317e-10 + 3.4496376622893im
+if imag(zpoles[1]) < 0
+    @test zpoles[1] ≈ -2.30871731988513e-10 - 3.44963766202144im
+    @test zpoles[2] ≈ -2.65852297441317e-10 + 3.4496376622893im
+else
+    @test zpoles[1] ≈ -2.65852297441317e-10 + 3.4496376622893im
+    @test zpoles[2] ≈ -2.30871731988513e-10 - 3.44963766202144im
+end

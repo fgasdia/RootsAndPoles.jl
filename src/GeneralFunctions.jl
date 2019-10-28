@@ -1,6 +1,7 @@
 function distance(p1::Complex, p2::Complex)
     return sqrt((real(p2) - real(p1))^2 + (imag(p2) - imag(p1))^2)
 end
+distance((p1, p2)::Tuple{Complex, Complex}) = distance(p1, p2)
 function distance(p1::AbstractPoint2D, p2::AbstractPoint2D)
     return sqrt((getx(p2)-getx(p1))^2 + (gety(p2)-gety(p1))^2)
 end
