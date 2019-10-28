@@ -3,10 +3,10 @@ function simplefcn(z)
 end
 
 # Analysis parameters
-xb = -2.  # real part begin
-xe = 2.  # real part end
-yb = -2.  # imag part begin
-ye = 2.  # imag part end
+xb = -2  # real part begin
+xe = 2  # real part end
+yb = -2  # imag part begin
+ye = 2  # imag part end
 r = 0.1  # initial mesh step
 tolerance = 1e-9
 
@@ -31,7 +31,7 @@ tess, 𝓔, quadrants = GRPF.tesselate!(tess, newnodes, pt -> simplefcn(geom2fcn
 𝐶 = GRPF.contouredges(tess, 𝓔)
 regions = GRPF.evaluateregions!(𝐶, e -> geom2fcn(e, ra, rb, ia, ib))
 
-zroots, zroots_multiplicity, zpoles, zpoles_multiplicity = GRPF.rootsandpoles(regions, quadrants, e -> geom2fcn(e, ra, rb, ia, ib))
+zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, e -> geom2fcn(e, ra, rb, ia, ib))
 
 sort!(zroots, by = x -> (real(x), imag(x)))
 

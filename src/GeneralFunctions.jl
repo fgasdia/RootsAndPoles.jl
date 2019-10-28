@@ -16,7 +16,7 @@ end
 Return true if `edge` has length greater than `tolerance`.
 """
 function longedge(edge::DelaunayEdge, tolerance, geom2fcn::Function)
-    return distance(geom2fcn(edge)...) > tolerance  # TODO: splat performance?
+    return distance(geom2fcn(edge)) > tolerance
 end
 
 """
@@ -53,9 +53,6 @@ function rectangulardomain(Zb::Complex, Ze::Complex, Δr)
     # NOTE: Matlab values of `x` differ slightly because of Matlab's float handling and
     # transpose operator.
     # `sum(x)` is much closer between Julia and Matlab if the above line for `x` is:
-    # `matlabx = [x' ((2:2:m) .- 1)'*dx .+ real(Zb)]'`
-
-    # TEMP
     # x = [x' ((2:2:m) .- 1)'*dx .+ real(Zb)]'
     # x = reshape(x, length(x))
 

@@ -18,10 +18,10 @@ function wvgd(z)
 end
 
 # Analysis parameters
-xb = 1.  # real part begin
+xb = 1.0  # real part begin
 xe = 2.5  # real part end
-yb = -1.  # imag part begin
-ye = 1.  # imag part end
+yb = -1.0  # imag part begin
+ye = 1.0  # imag part end
 r = 0.5  # initial mesh step
 tolerance = 1e-9
 
@@ -46,7 +46,7 @@ tess, 𝓔, quadrants = GRPF.tesselate!(tess, newnodes, pt -> wvgd(geom2fcn(pt, 
 𝐶 = GRPF.contouredges(tess, 𝓔)
 regions = GRPF.evaluateregions!(𝐶, e -> geom2fcn(e, ra, rb, ia, ib))
 
-zroots, zroots_multiplicity, zpoles, zpoles_multiplicity = GRPF.rootsandpoles(regions, quadrants, e -> geom2fcn(e, ra, rb, ia, ib))
+zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, e -> geom2fcn(e, ra, rb, ia, ib))
 
 sort!(zroots, by = x -> (real(x), imag(x)))
 sort!(zpoles, by = x -> (real(x), imag(x)))

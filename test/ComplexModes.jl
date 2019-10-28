@@ -44,7 +44,7 @@ function complexmodes(z)
       w = det(W)
 end
 
-R = 1.
+R = 1.0
 r = 0.15
 
 origcoords = diskdomain(R, r)
@@ -69,7 +69,7 @@ tess, 𝓔, quadrants = GRPF.tesselate!(tess, newnodes, pt -> complexmodes(geom2
 𝐶 = GRPF.contouredges(tess, 𝓔)
 regions = GRPF.evaluateregions!(𝐶, e -> geom2fcn(e, ra, rb, ia, ib))
 
-zroots, zroots_multiplicity, zpoles, zpoles_multiplicity = GRPF.rootsandpoles(regions, quadrants, e -> geom2fcn(e, ra, rb, ia, ib))
+zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, e -> geom2fcn(e, ra, rb, ia, ib))
 
 sort!(zroots, by = x -> (real(x), imag(x)))
 sort!(zpoles, by = x -> (real(x), imag(x)))
