@@ -23,9 +23,6 @@ const MAXITERATIONS = 100
 const MAXNODES = 500000
 const SKINNYTRIANGLE = 3
 
-# To activate debugging within this file: (requires reloading this module)
-# ENV["JULIA_DEBUG"] = "GRPF"
-
 """
     quadrant(val)
 
@@ -55,7 +52,7 @@ Evaluate `fcn` for [`quadrant`](@ref) at `nodes` and fill `quadrants`.
 
 `quadrants` is a Vector{} where each index corresponds to `node` index.
 """
-function assignquadrants!(quadrants::Vector{Int8},
+@inline function assignquadrants!(quadrants::Vector{Int8},
                           nodes::Vector{IndexablePoint2D}, fcn::Function)
     @inbounds for ii in eachindex(nodes)
         val = fcn(nodes[ii])  # TODO: `val` is of Any type
@@ -121,13 +118,13 @@ function counttriangleswithnodes(
 
     trianglecounts = zeros(Int, count(.!isexternal.(tess._trigs)))
     triidx = 0
-    for triangle in tess
+    @inbounds for triangle in tess
         triidx += 1
         # `triangle` is in general not equal to `tess._trigs[triidx]`
         ea = geta(triangle)
         eb = getb(triangle)
         ec = getc(triangle)
-        for nodeidx in eachindex(edgenodes)
+        @inbounds for nodeidx in eachindex(edgenodes)
             if (ea == edgenodes[nodeidx]) || (eb == edgenodes[nodeidx]) || (ec == edgenodes[nodeidx])
                 trianglecounts[triidx] += 1
             end
@@ -141,7 +138,7 @@ function uniquenodes!(
     edges::Vector{DelaunayEdge{IndexablePoint2D}}
     )
 
-    for ii in eachindex(edges)
+    @inbounds for ii in eachindex(edges)
         nodea = geta(edges[ii])
         nodeb = getb(edges[ii])
 
@@ -188,7 +185,7 @@ function zone1newnodes!(
     nothing
 end
 
-function addnewnode!(
+@inline function addnewnode!(
     newnodes::Vector{IndexablePoint2D},
     node1::IndexablePoint2D,
     node2::IndexablePoint2D,
@@ -198,10 +195,8 @@ function addnewnode!(
 
     if distance(geom2fcn(node1), geom2fcn(node2)) > tolerance
         avgnode = (node1+node2)/2
-        for ii in eachindex(newnodes)
-            if distance(newnodes[ii], avgnode) < 2*eps()
-                return nothing
-            end
+        @inbounds for ii in eachindex(newnodes)
+            distance(newnodes[ii], avgnode) < 2*eps() && return nothing
         end
         push!(newnodes, avgnode)  # only executed if we haven't already returned
     end
@@ -211,13 +206,12 @@ end
 """
 Add nodes to `newnodes` in zone 2 (skinny triangles).
 """
-function zone2newnodes!(
+@inline function zone2newnodes!(
     newnodes::Vector{IndexablePoint2D},
     triangles::Vector{DelaunayTriangle{IndexablePoint2D}}
     )
 
     @inbounds for triangle in triangles
-        # triangle = triangles[ii]::DelaunayTriangle{IndexablePoint2D}
         na = geta(triangle)
         nb = getb(triangle)
         nc = getc(triangle)
@@ -270,10 +264,10 @@ function contouredges(
 
     # Remove duplicate (reverse) edges from `tmpedges` and otherwise append to `𝐶`
     𝐶 = Vector{DelaunayEdge{IndexablePoint2D}}()
-    duplicateedges = zeros(Int, length(tmpedges))
+    duplicateedges = zeros(Int8, length(tmpedges))
     @inbounds for (idxa, edgea) in enumerate(tmpedges)
         if duplicateedges[idxa] == 0
-            for (idxb, edgeb) in enumerate(tmpedges)
+            @inbounds for (idxb, edgeb) in enumerate(tmpedges)
                 # Check if Edge(a,b) == Edge(b, a), i.e. there are duplicate edges
                 if edgea == DelaunayEdge(getb(edgeb), geta(edgeb))
                     duplicateedges[idxa] = 2
@@ -332,21 +326,24 @@ function findnextnode(
 
     P = geom2fcn(prevnode)
     S = geom2fcn(refnode)
-    N = geom2fcn.(tempnodes)
 
-    numtempnodes = length(N)
+    ϕs = Vector{Float64}(undef, length(tempnodes))
+    for i in eachindex(tempnodes)
+        N = geom2fcn(tempnodes[i])
 
-    SP = ones(numtempnodes)*(P-S)
-    SN = N .- S
+        SP = P - S
+        SN = N - S
 
-    SPlength = norm.(SP)
-    SNlength = norm.(SN)
+        SPlength = norm(SP)
+        SNlength = norm(SN)
 
-    dotprod = real.(SP).*real.(SN)+imag.(SP).*imag.(SN)
-    ϕ = acos.(dotprod./(SPlength.*SNlength))
-    tmp = findall(real.(SP).*imag.(SN)-imag.(SP).*real.(SN) .< 0)
-    ϕ[tmp] .= 2π .- ϕ[tmp]
-    findmin(ϕ)[2]  # return index of minimum `ϕ`
+        dotprod = real(SP)*real(SN) + imag(SP)*imag(SN)
+        ϕs[i] = acos(dotprod/(SPlength*SNlength))
+        if real(SP)*imag(SN) - imag(SP)*real(SN) < 0
+            ϕs[i] = 2π - ϕs[i]
+        end
+    end
+    return findmin(ϕs)[2]  # return index of minimum `ϕ`
 end
 
 """
@@ -365,14 +362,15 @@ function evaluateregions!(
     # Initialize
     numregions = 1
 
+    # TODO: Type instability of `refnode` > Core.Box
+    # see https://github.com/JuliaLang/julia/issues/15276#issuecomment-297596373
+
     regions = [[geta(𝐶[1])]]
     refnode = getb(𝐶[1])
     popfirst!(𝐶)
     while length(𝐶) > 0
-        # TODO: redesign inside this while loop so nextedgeidx isn't Union{Int, Array{Int}}
-        nextedgeidx = findall(e->geta(e)==refnode, 𝐶)
-
-        if isempty(nextedgeidx)
+        nextedgeidxs = findall(e->geta(e)==refnode, 𝐶)
+        if isempty(nextedgeidxs)
             push!(regions[numregions], refnode)
             # New region
             numregions += 1
@@ -380,13 +378,13 @@ function evaluateregions!(
             refnode = getb(𝐶[1])
             popfirst!(𝐶)
         else
-            if length(nextedgeidx) > 1
+            if length(nextedgeidxs) > 1
                 prevnode = regions[numregions][end]
-                tempnodes = getb.(𝐶[nextedgeidx])
+                tempnodes = getb.(𝐶[nextedgeidxs])
                 idx = findnextnode(prevnode, refnode, tempnodes, geom2fcn)
-                nextedgeidx = nextedgeidx[idx]
+                nextedgeidx = nextedgeidxs[idx]
             else
-                nextedgeidx = nextedgeidx[1]
+                nextedgeidx = nextedgeidxs[1]
             end
 
             nextedge = 𝐶[nextedgeidx]
@@ -417,7 +415,7 @@ function rootsandpoles(
         # XXX: Order of regions?
         quadrantsequence = [quadrants[getindex(node)] for node in regions[ii]]
 
-        # Sign flip because `regions[ii]` are in opposite order of Matlab??
+        # Sign flip because `regions[ii]` are in opposite order of Matlab?
         dQ = -diff(quadrantsequence)
         @inbounds for jj in eachindex(dQ)
             if dQ[jj] == 3

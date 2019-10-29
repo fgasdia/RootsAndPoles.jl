@@ -92,12 +92,6 @@ function ptest()
 end
 
 
-
-
-tess, 𝓔, quadrants = GRPF.tesselate!(tess, newnodes, fcn, geom2fcn, tolerance)
-
-
-
 𝐶 = GRPF.contouredges(tess, 𝓔)  # ~2 ms, 1MB alloc
 regions = GRPF.evaluateregions!(𝐶, geom2fcn)  # < 1 ms, 10 kB alloc
 zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, geom2fcn)
@@ -146,16 +140,9 @@ function localrootsandpoles(regions, quadrants, geom2fcn)
 end
 
 
-
-
-
-
-
-
-
-
-
-
+#==
+tesselate
+==#
 numnodes = tess._total_points_added
 
 𝓔 = Vector{GRPF.DelaunayEdge{GRPF.IndexablePoint2D}}()
@@ -180,7 +167,7 @@ isempty(𝓔) && error("No roots in the domain")
 select𝓔 = filter(e -> GRPF.longedge(e, tolerance, geom2fcn), 𝓔)
 isempty(select𝓔) && return tess, 𝓔, quadrants
 
-max𝓔length = maximum(GRPF.distance(geom2fcnf(e)) for e in select𝓔)
+max𝓔length = maximum(GRPF.distance(geom2fcn(e)) for e in select𝓔)
 
 # How many times does each triangle contain a `select𝓔` node?
 trianglecounts = GRPF.counttriangleswithnodes(tess, select𝓔)
@@ -188,10 +175,20 @@ zone1triangles, zone2triangles = GRPF.splittriangles(tess, trianglecounts)
 
 # Add new nodes in zone 1
 newnodes = Vector{IndexablePoint2D}()
-GRPF.zone1newnodes!(newnodes, zone1triangles, geom2fcnf, tolerance)
+GRPF.zone1newnodes!(newnodes, zone1triangles, geom2fcn, tolerance)
 
 # Add new nodes in zone 2
 GRPF.zone2newnodes!(newnodes, zone2triangles)
 
 # Have to assign indexes to new nodes (which are all currently -1)
 setindex!.(newnodes, (1:length(newnodes)).+numnodes)
+
+
+#==
+the rest
+==#
+𝐶 = GRPF.contouredges(tess, 𝓔)
+
+regions = GRPF.evaluateregions!(𝐶, geom2fcn)
+
+zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, geom2fcn)

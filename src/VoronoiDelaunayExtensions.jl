@@ -17,7 +17,6 @@ Base.setindex!(p::IndexablePoint2D, v::Int) = setfield!(p, :_index, v)
 Base.:+(p1::IndexablePoint2D, p2::IndexablePoint2D) = IndexablePoint2D(getx(p1)+getx(p2), gety(p1)+gety(p2), -1)
 Base.:/(p1::IndexablePoint2D, n::Real) = IndexablePoint2D(getx(p1)/n, gety(p1)/n, -1)
 
-
 # Improved performance of `delaunayedges()`
 # see: https://github.com/JuliaGeometry/VoronoiDelaunay.jl/issues/47
 function delaunayedges_fast(t::DelaunayTessellation2D)
