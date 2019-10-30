@@ -1,5 +1,7 @@
 # GRPF.jl: Global complex Roots and Poles Finding in Julia
 
+[![Build Status](https://travis-ci.com/EP-Guy/GRPF.jl.svg?token=U9y2eEri8JFAZrWUCrwX&branch=master)](https://travis-ci.com/EP-Guy/GRPF.jl) [![Build status](https://ci.appveyor.com/api/projects/status/gioglmp08jcivc7h?svg=true)](https://ci.appveyor.com/project/EP-Guy/grpf-jl)
+
 A Julia implementation of [GRPF](https://github.com/PioKow/GRPF) by Dr. Piotr Kowalczyk. Please consider citing Piotr's publications if this code is used in scientific work:
 
   1. P. Kowalczyk, “Complex Root Finding Algorithm Based on Delaunay Triangulation”, ACM Transactions on Mathematical Software, vol. 41, no. 3, art. 19, pp. 1-13, June 2015. https://dl.acm.org/citation.cfm?id=2699457
