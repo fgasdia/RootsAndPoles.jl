@@ -41,18 +41,36 @@ regions = GRPF.evaluateregions!(𝐶, e -> geom2fcn(e, ra, rb, ia, ib))
 
 zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, e -> geom2fcn(e, ra, rb, ia, ib))
 
-sort!(zroots, by = x -> (real(x), imag(x)))
-sort!(zpoles, by = x -> (real(x), imag(x)))
-
 @test length(zroots) == 6
 @test length(zpoles) == 2
 
-@test zroots[1] ≈ -1.624715288135189 + 0.182095877702038im
-@test zroots[2] ≈ -1.520192978034417 - 0.173670452237129im
-@test zroots[3] ≈ -0.515113098919392 + 0.507111597359180im
-@test zroots[4] ≈ 0.515113098795215 - 0.507111597284675im
-@test zroots[5] ≈ 1.520192978034417 + 0.173670452237129im
-@test zroots[6] ≈ 1.624715288135189 - 0.182095877702037im
+matlab_zroots = [-1.624715288135189 + 0.182095877702038im,
+                 -1.520192978034417 - 0.173670452237129im,
+                 -0.515113098919392 + 0.507111597359180im,
+                  0.515113098795215 - 0.507111597284675im,
+                  1.520192978034417 + 0.173670452237129im,
+                  1.624715288135189 - 0.182095877702037im]
 
-@test zpoles[1] ≈ -1.570796326699632 - 0.000000000206961im
-@test zpoles[2] ≈ 1.570796326699632 - 0.000000000206961im
+matlab_zpoles = [-1.570796326699632 - 0.000000000206961im,
+                  1.570796326699632 - 0.000000000206961im]
+
+@test approxmatch(zroots, matlab_zroots)
+@test approxmatch(zpoles, matlab_zpoles)
+
+# grpf()
+newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
+tess = DelaunayTessellation2D{IndexablePoint2D}(2000)
+
+gzroots, gzpoles = grpf(tess, newnodes, pt -> defaultfcn(geom2fcn(pt, ra, rb, ia, ib)),
+                        e -> geom2fcn(e, ra, rb, ia, ib), tolerance)
+
+@test approxmatch(zroots, gzroots)
+@test approxmatch(zpoles, gzpoles)
+
+newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
+tess = DelaunayTessellation2D{IndexablePoint2D}(2000)
+gzrootspd, gzpolespd = grpf(tess, newnodes, pt -> defaultfcn(geom2fcn(pt, ra, rb, ia, ib)),
+                          e -> geom2fcn(e, ra, rb, ia, ib), tolerance, PhaseDiffs())
+
+@test approxmatch(gzroots, gzrootspd)
+@test approxmatch(gzpoles, gzpolespd)

@@ -48,16 +48,33 @@ regions = GRPF.evaluateregions!(𝐶, e -> geom2fcn(e, ra, rb, ia, ib))
 
 zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, e -> geom2fcn(e, ra, rb, ia, ib))
 
-sort!(zroots, by = x -> (real(x), imag(x)))
-sort!(zpoles, by = x -> (real(x), imag(x)))
-
 @test length(zroots) == 7
 @test length(zpoles) == 0
 
-@test zroots[1] ≈ 1.096752543421462 - 0.000197146739811im
-@test zroots[2] ≈ 1.240454471623525 - 0.000133821833879im
-@test zroots[3] ≈ 1.353140429314226 - 0.000086139142513im
-@test zroots[4] ≈ 1.439795544324443 - 0.000052001606673im
-@test zroots[5] ≈ 1.504169866163284 - 0.000028029270470im
-@test zroots[6] ≈ 1.548692244058475 - 0.000012100953609im
-@test zroots[7] ≈ 1.574863045662642 - 0.000002974364907im
+matlab_zroots = [1.096752543421462 - 0.000197146739811im,
+                 1.240454471623525 - 0.000133821833879im,
+                 1.353140429314226 - 0.000086139142513im,
+                 1.439795544324443 - 0.000052001606673im,
+                 1.504169866163284 - 0.000028029270470im,
+                 1.548692244058475 - 0.000012100953609im,
+                 1.574863045662642 - 0.000002974364907im]
+
+matlab_zpoles = ComplexF64[]
+
+# grpf()
+newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
+tess = DelaunayTessellation2D{IndexablePoint2D}(5000)
+
+gzroots, gzpoles = grpf(tess, newnodes, pt -> wvgd(geom2fcn(pt, ra, rb, ia, ib)),
+                        e -> geom2fcn(e, ra, rb, ia, ib), tolerance)
+
+@test approxmatch(zroots, gzroots)
+@test approxmatch(zpoles, gzpoles)
+
+newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
+tess = DelaunayTessellation2D{IndexablePoint2D}(5000)
+gzrootspd, gzpolespd = grpf(tess, newnodes, pt -> wvgd(geom2fcn(pt, ra, rb, ia, ib)),
+                            e -> geom2fcn(e, ra, rb, ia, ib), tolerance, PhaseDiffs())
+
+@test approxmatch(gzroots, gzrootspd)
+@test approxmatch(gzpoles, gzpolespd)

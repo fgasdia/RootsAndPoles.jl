@@ -17,11 +17,13 @@ using VoronoiDelaunay
 include("VoronoiDelaunayExtensions.jl")
 include("GeneralFunctions.jl")
 
-export rectangulardomain, diskdomain, grpf
+export rectangulardomain, diskdomain, grpf, PhaseDiffs
 
 const MAXITERATIONS = 100
 const MAXNODES = 500000
 const SKINNYTRIANGLE = 3
+
+struct PhaseDiffs end
 
 """
     quadrant(val)
@@ -100,6 +102,36 @@ function candidateedges(
         end
     end
     return 𝓔
+end
+
+function candidateedges(
+    tess::DelaunayTessellation2D{IndexablePoint2D},
+    quadrants::Vector{Int8},
+    ::PhaseDiffs
+    )
+
+    𝓔 = Vector{DelaunayEdge{IndexablePoint2D}}()
+    phasediffs = Vector{Int8}()
+
+    @inbounds for edge in delaunayedges_fast(tess)
+        e = edge::DelaunayEdge{IndexablePoint2D}
+        nodea, nodeb = geta(e), getb(e)
+        idxa, idxb = getindex(nodea), getindex(nodeb)
+
+        # NOTE: To match Matlab, force `idxa` < `idxb`
+        # (order doesn't matter for `ΔQ == 2`, which is the only case we care about)
+        if idxa > idxb
+            idxa, idxb = idxb, idxa
+        end
+
+        ΔQ = mod(quadrants[idxa] - quadrants[idxb], 4)  # phase difference
+        if ΔQ == 2
+            push!(𝓔, e)
+        end
+
+        push!(phasediffs, ΔQ)
+    end
+    return 𝓔, phasediffs
 end
 
 """
@@ -480,6 +512,7 @@ function tesselate!(
         isempty(select𝓔) && return tess, 𝓔, quadrants
 
         max𝓔length = maximum(distance(geom2fcn(e)) for e in select𝓔)
+        max𝓔length < tolerance && return tess, 𝓔, quadrants, phasediffs
 
         # How many times does each triangle contain a `select𝓔` node?
         trianglecounts = counttriangleswithnodes(tess, select𝓔)
@@ -499,6 +532,64 @@ function tesselate!(
     return tess, 𝓔, quadrants
 end
 
+function tesselate!(
+    tess::DelaunayTessellation2D{IndexablePoint2D},
+    newnodes::Vector{IndexablePoint2D},
+    fcn::Function,
+    geom2fcn::Function,
+    tolerance,
+    ::PhaseDiffs
+    )
+
+    # Initialize
+    numnodes = tess._total_points_added
+    @assert numnodes == 0
+
+    𝓔 = Vector{DelaunayEdge{IndexablePoint2D}}()
+    quadrants = Vector{Int8}()
+
+    iteration = 0
+    while (iteration < MAXITERATIONS) && (numnodes < MAXNODES)
+        iteration += 1
+
+        # Determine which quadrant function value belongs at each node
+        numnewnodes = length(newnodes)
+        append!(quadrants, Vector{Int8}(undef, numnewnodes))
+        assignquadrants!(quadrants, newnodes, fcn)
+
+        # Add new nodes to `tess`
+        push!(tess, newnodes)
+        numnodes += numnewnodes
+
+        # Determine candidate edges that may be near a root or pole
+        𝓔, phasediffs = candidateedges(tess, quadrants, PhaseDiffs())
+        isempty(𝓔) && error("No roots in the domain")
+
+        # Select candidate edges that are longer than the chosen tolerance
+        select𝓔 = filter(e -> longedge(e, tolerance, geom2fcn), 𝓔)
+        isempty(select𝓔) && return tess, 𝓔, quadrants, phasediffs
+
+        max𝓔length = maximum(distance(geom2fcn(e)) for e in select𝓔)
+        max𝓔length < tolerance && return tess, 𝓔, quadrants, phasediffs
+
+        # How many times does each triangle contain a `select𝓔` node?
+        trianglecounts = counttriangleswithnodes(tess, select𝓔)
+        zone1triangles, zone2triangles = splittriangles(tess, trianglecounts)
+
+        # Add new nodes in zone 1
+        newnodes = Vector{IndexablePoint2D}()
+        zone1newnodes!(newnodes, zone1triangles, geom2fcn, tolerance)
+
+        # Add new nodes in zone 2
+        zone2newnodes!(newnodes, zone2triangles)
+
+        # Have to assign indexes to new nodes (which are all currently -1)
+        setindex!.(newnodes, (1:length(newnodes)).+numnodes)
+    end
+
+    return tess, 𝓔, quadrants, phasediffs
+end
+
 """
     grpf(tess, newnodes, fcn, geom2fcn, tolerance)
 """
@@ -516,6 +607,23 @@ function grpf(
     zroots, zpoles = rootsandpoles(regions, quadrants, geom2fcn)
 
     return zroots, zpoles
+end
+
+function grpf(
+    tess::DelaunayTessellation2D{IndexablePoint2D},
+    newnodes::Vector{IndexablePoint2D},
+    fcn::Function,
+    geom2fcn::Function,
+    tolerance,
+    ::PhaseDiffs
+    )
+
+    tess, 𝓔, quadrants, phasediffs = tesselate!(tess, newnodes, fcn, geom2fcn, tolerance, PhaseDiffs())
+    𝐶 = contouredges(tess, 𝓔)
+    regions = evaluateregions!(𝐶, geom2fcn)
+    zroots, zpoles = rootsandpoles(regions, quadrants, geom2fcn)
+
+    return zroots, zpoles, phasediffs
 end
 
 end # module
