@@ -5,6 +5,25 @@ using VoronoiDelaunay
 
 using GRPF
 
+function approxmatch(A::AbstractArray, B::AbstractArray)
+    length(A) == length(B) || return false
+
+    # This could be less than O(n²) but it's not worth the bookkeeping effort
+    @inbounds for i in eachindex(A)
+        amatch = false
+        @inbounds for j in eachindex(B)
+            if A[i] ≈ B[j]
+                amatch = true
+                break
+            end
+        end
+        if !amatch
+            return false
+        end
+    end
+    return true
+end
+
 """
     mapfunctionval(z, ra, rb, ia, ib)
 
