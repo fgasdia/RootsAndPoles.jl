@@ -623,7 +623,7 @@ function grpf(
     regions = evaluateregions!(𝐶, geom2fcn)
     zroots, zpoles = rootsandpoles(regions, quadrants, geom2fcn)
 
-    return zroots, zpoles, phasediffs
+    return zroots, zpoles, quadrants, phasediffs
 end
 
 end # module
