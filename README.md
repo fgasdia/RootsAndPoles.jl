@@ -8,9 +8,11 @@ A Julia implementation of [GRPF](https://github.com/PioKow/GRPF) by Dr. Piotr Ko
 
 GRPF attempts to **find all the zeros and poles of a (complex) function in a fixed region**. These types of problems are frequently encountered in electromagnetic waveguides, but the algorithm can also be used for similar problems.
 
+<br/><br/>
+
 <img align="left" src="graphenetransmissionline.svg"> GRPF first samples the function on a regular triangular mesh through Delaunay triangulation. Candidate regions to search for roots and poles are determined and the discretized Cauchy's argument is applied _without needing the derivative of the function or integration over the contour_. To improve the accuracy of the results, a self-adaptive mesh refinement occurs inside the identified candidate regions.
 
-<br/><br/><br/><br/><br/><br/><br/><br/>
+<br/><br/><br/><br/><br/><br/>
 
 ## Usage
 
