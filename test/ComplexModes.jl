@@ -103,7 +103,7 @@ ggzroots, ggzpoles = grpf(complexmodes, origcoords, tolerance)
 @test approxmatch(ggzroots, matlab_zroots)
 @test approxmatch(ggzpoles, matlab_zpoles)
 
-ggpzroots, ggpzpoles, quadrants, phasediffs = grpf(complexmodes, origcoords, tolerance, PhaseDiffs())
+ggpzroots, ggpzpoles, quadrants, phasediffs = grpf(complexmodes, origcoords, tolerance, PlotData())
 
 @test approxmatch(ggpzroots, matlab_zroots)
 @test approxmatch(ggpzpoles, matlab_zpoles)

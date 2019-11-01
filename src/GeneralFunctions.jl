@@ -76,7 +76,6 @@ function diskdomain(R, Δr)
     np = 6
     for ii = 1:n
         f = f₀ .+ range(0, stop=2π, length=np+1)
-        # xyn = Rn[ii]*complex.(cos.(f[1:end-1]), sin.(f[1:end-1]))  # TODO: preallocate?
         xyn = Rn[ii]*cis.(f[1:end-1])
         append!(newnodes, xyn)
         f₀ += π/6/n
