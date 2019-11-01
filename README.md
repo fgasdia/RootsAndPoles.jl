@@ -1,6 +1,6 @@
 # GRPF.jl: Global complex Roots and Poles Finding in Julia
 
-[![Build Status](https://travis-ci.com/EP-Guy/GRPF.jl.svg?token=U9y2eEri8JFAZrWUCrwX&branch=master)](https://travis-ci.com/EP-Guy/GRPF.jl) [![Build status](https://ci.appveyor.com/api/projects/status/gioglmp08jcivc7h?svg=true)](https://ci.appveyor.com/project/EP-Guy/grpf-jl)
+[![Build Status](https://travis-ci.com/EP-Guy/GRPF.jl.svg?token=U9y2eEri8JFAZrWUCrwX&branch=master)](https://travis-ci.com/EP-Guy/GRPF.jl) [![Build status](https://ci.appveyor.com/api/projects/status/gioglmp08jcivc7h?svg=true)](https://ci.appveyor.com/project/EP-Guy/grpf-jl) [![DOI](https://zenodo.org/badge/154031378.svg)](https://zenodo.org/badge/latestdoi/154031378)
 
 A Julia implementation of [GRPF](https://github.com/PioKow/GRPF) by Dr. Piotr Kowalczyk.
 
@@ -97,4 +97,4 @@ Please consider citing Piotr's publications if this code is used in scientific w
   1. P. Kowalczyk, “Complex Root Finding Algorithm Based on Delaunay Triangulation”, ACM Transactions on Mathematical Software, vol. 41, no. 3, art. 19, pp. 1-13, June 2015. https://dl.acm.org/citation.cfm?id=2699457
   2. P. Kowalczyk, "Global Complex Roots and Poles Finding Algorithm Based on Phase Analysis for Propagation and Radiation Problems," IEEE Transactions on Antennas and Propagation, vol. 66, no. 12, pp. 7198-7205, Dec. 2018. https://ieeexplore.ieee.org/document/8457320
 
-We also encourage you to cite this package if used in scientific work. Refer to [CITATION.bib](CITATION.bib).
+We also encourage you to cite this package if used in scientific work. Refer to the Zenodo DOI at the top of the page or [CITATION.bib](CITATION.bib).
