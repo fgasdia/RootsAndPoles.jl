@@ -17,13 +17,13 @@ using VoronoiDelaunay
 include("VoronoiDelaunayExtensions.jl")
 include("GeneralFunctions.jl")
 
-export rectangulardomain, diskdomain, grpf, PhaseDiffs
+export rectangulardomain, diskdomain, grpf, grpf!, PlotData
 
 const MAXITERATIONS = 100
 const MAXNODES = 500000
 const SKINNYTRIANGLE = 3
 
-struct PhaseDiffs end
+struct PlotData end
 
 """
     quadrant(val)
@@ -107,7 +107,7 @@ end
 function candidateedges(
     tess::DelaunayTessellation2D{IndexablePoint2D},
     quadrants::Vector{Int8},
-    ::PhaseDiffs
+    ::PlotData
     )
 
     𝓔 = Vector{DelaunayEdge{IndexablePoint2D}}()
@@ -236,6 +236,8 @@ end
 end
 
 """
+    zone2newnodes!(newnodes, triangles)
+
 Add nodes to `newnodes` in zone 2 (skinny triangles).
 """
 @inline function zone2newnodes!(
@@ -320,7 +322,7 @@ end
 """
     splittriangles(tess, trianglecounts)
 
-Separate triangles by zones.
+Separate triangles in `tess` by zones.
 """
 function splittriangles(
     tess::DelaunayTessellation2D{IndexablePoint2D},
@@ -432,6 +434,8 @@ end
 
 """
     rootsandpoles(regions, quadrants, geom2fcn)
+
+Identify roots and poles of function based on regions and quadrants.
 """
 function rootsandpoles(
     regions::Vector{Vector{IndexablePoint2D}},
@@ -474,6 +478,8 @@ end
 
 """
     tesselate!(tess, newnodes, fcn, geom2fcn, tolerance)
+
+Label quadrants, identify candidate edges, and iteratively split triangles.
 """
 function tesselate!(
     tess::DelaunayTessellation2D{IndexablePoint2D},
@@ -538,7 +544,7 @@ function tesselate!(
     fcn::Function,
     geom2fcn::Function,
     tolerance,
-    ::PhaseDiffs
+    ::PlotData
     )
 
     # Initialize
@@ -562,7 +568,7 @@ function tesselate!(
         numnodes += numnewnodes
 
         # Determine candidate edges that may be near a root or pole
-        𝓔, phasediffs = candidateedges(tess, quadrants, PhaseDiffs())
+        𝓔, phasediffs = candidateedges(tess, quadrants, PlotData())
         isempty(𝓔) && error("No roots in the domain")
 
         # Select candidate edges that are longer than the chosen tolerance
@@ -591,37 +597,129 @@ function tesselate!(
 end
 
 """
-    grpf(tess, newnodes, fcn, geom2fcn, tolerance)
-"""
-function grpf(
-    tess::DelaunayTessellation2D{IndexablePoint2D},
-    newnodes::Vector{IndexablePoint2D},
-    fcn::Function,
-    geom2fcn::Function,
-    tolerance
-    )
+    grpf(fcn, origcoords, tolerance, tess_size_hint=5000)
 
-    tess, 𝓔, quadrants = tesselate!(tess, newnodes, fcn, geom2fcn, tolerance)
+Return roots and poles of a single (complex) argument function `fcn`.
+
+Searches within a domain specified by the vector of `origcoords` with a final `tolerance`.
+`tess_size_hint` is a sizehint for the DelaunayTessellation.
+
+# Examples
+```jldoctest
+julia> simplefcn(z) = (z - 1)*(z - im)^2*(z + 1)^3/(z + im)
+
+julia> xb, xe = -2, 2
+
+julia> yb, ye = -2, 2
+
+julia> r = 0.1
+
+julia> tolerance = 1e-9
+
+julia> origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
+
+julia> roots, poles = grpf(simplefcn, origcoords, tolerance);
+
+julia> roots
+3-element Array{Complex{Float64},1}:
+    -0.9999999999512241 - 2.865605189037104e-11im
+     0.9999999996829548 - 6.208811242913729e-11im
+ 1.9022756703179778e-10 + 1.0000000000372526im
+
+ julia> poles
+ 1-element Array{Complex{Float64},1}:
+ -3.8045513406359555e-10 - 1.0000000002235174im
+```
+
+See also: [`grpf`](@ref)
+"""
+function grpf(fcn::Function, origcoords::AbstractArray, tolerance, tess_size_hint=5000)
+    # Need to map space domain for VoronoiDelaunay.jl
+    rmin, rmax = minimum(real(origcoords)), maximum(real(origcoords))
+    imin, imax = minimum(imag(origcoords)), maximum(imag(origcoords))
+
+    # `max_coord` and `min_coord` are provided by `VoronoiDelaunay.jl`
+    width = max_coord - min_coord
+    ra = width/(rmax-rmin)
+    rb = max_coord - ra*rmax
+
+    ia = width/(imax-imin)
+    ib = max_coord - ia*imax
+
+    origcoords = fcn2geom.(origcoords, ra, rb, ia, ib)
+    newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
+    tess = DelaunayTessellation2D{IndexablePoint2D}(tess_size_hint)
+
+    f = pt -> fcn(geom2fcn(pt, ra, rb, ia, ib))
+    g = z -> geom2fcn(z, ra, rb, ia, ib)
+
+    tess, 𝓔, quadrants = tesselate!(tess, newnodes, f, g, tolerance)
     𝐶 = contouredges(tess, 𝓔)
-    regions = evaluateregions!(𝐶, geom2fcn)
-    zroots, zpoles = rootsandpoles(regions, quadrants, geom2fcn)
+    regions = evaluateregions!(𝐶, g)
+    zroots, zpoles = rootsandpoles(regions, quadrants, g)
 
     return zroots, zpoles
 end
 
-function grpf(
-    tess::DelaunayTessellation2D{IndexablePoint2D},
-    newnodes::Vector{IndexablePoint2D},
-    fcn::Function,
-    geom2fcn::Function,
-    tolerance,
-    ::PhaseDiffs
-    )
+"""
+    grpf(fcn, origcoords, tolerance, ::PlotData, tess_size_hint=5000)
 
-    tess, 𝓔, quadrants, phasediffs = tesselate!(tess, newnodes, fcn, geom2fcn, tolerance, PhaseDiffs())
+Variant of `grpf` that returns `quadrants` and `phasediffs` in addition to `zroots` and
+`zpoles`, primarily for plotting or diagnostics.
+
+# Examples
+```jldoctest
+julia> simplefcn(z) = (z - 1)*(z - im)^2*(z + 1)^3/(z + im)
+
+julia> xb, xe = -2, 2
+
+julia> yb, ye = -2, 2
+
+julia> r = 0.1
+
+julia> tolerance = 1e-9
+
+julia> origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
+
+julia> roots, poles, quadrants, phasediffs = grpf(simplefcn, origcoords, tolerance, PlotData());
+
+julia> roots
+3-element Array{Complex{Float64},1}:
+    -0.9999999999512241 - 2.865605189037104e-11im
+     0.9999999996829548 - 6.208811242913729e-11im
+ 1.9022756703179778e-10 + 1.0000000000372526im
+
+ julia> poles
+ 1-element Array{Complex{Float64},1}:
+ -3.8045513406359555e-10 - 1.0000000002235174im
+```
+
+See also: [`grpf`](@ref)
+"""
+function grpf(fcn::Function, origcoords::AbstractArray, tolerance, ::PlotData, tess_size_hint=5000)
+    # Need to map space domain for VoronoiDelaunay.jl
+    rmin, rmax = minimum(real(origcoords)), maximum(real(origcoords))
+    imin, imax = minimum(imag(origcoords)), maximum(imag(origcoords))
+
+    # `max_coord` and `min_coord` are provided by `VoronoiDelaunay.jl`
+    width = max_coord - min_coord
+    ra = width/(rmax-rmin)
+    rb = max_coord - ra*rmax
+
+    ia = width/(imax-imin)
+    ib = max_coord - ia*imax
+
+    origcoords = fcn2geom.(origcoords, ra, rb, ia, ib)
+    newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
+    tess = DelaunayTessellation2D{IndexablePoint2D}(tess_size_hint)
+
+    f = pt -> fcn(geom2fcn(pt, ra, rb, ia, ib))
+    g = z -> geom2fcn(z, ra, rb, ia, ib)
+
+    tess, 𝓔, quadrants, phasediffs = tesselate!(tess, newnodes, f, g, tolerance, PlotData())
     𝐶 = contouredges(tess, 𝓔)
-    regions = evaluateregions!(𝐶, geom2fcn)
-    zroots, zpoles = rootsandpoles(regions, quadrants, geom2fcn)
+    regions = evaluateregions!(𝐶, g)
+    zroots, zpoles = rootsandpoles(regions, quadrants, g)
 
     return zroots, zpoles, quadrants, phasediffs
 end

@@ -76,11 +76,39 @@ function diskdomain(R, Δr)
     np = 6
     for ii = 1:n
         f = f₀ .+ range(0, stop=2π, length=np+1)
-        # xyn = Rn[ii]*complex.(cos.(f[1:end-1]), sin.(f[1:end-1]))  # TODO: preallocate?
         xyn = Rn[ii]*cis.(f[1:end-1])
         append!(newnodes, xyn)
         f₀ += π/6/n
         np += 6
     end
     return newnodes
+end
+
+"""
+    fcn2geom(z, ra, rb, ia, ib)
+
+Linearly map function values `z` within domain from `ra` to `rb` and `ia` to `ib`. Necessary
+because [VoronoiDelaunay.jl](https://github.com/JuliaGeometry/VoronoiDelaunay.jl) requires
+point coordinates be within `min_coord <= x <= max_coord` where `min_coord=1.0+eps(Float64)`
+and `max_coord=2.0-2eps(Float64)`. `max_coord` and `min_coord` are provided by
+`VoronoiDelaunay.jl`
+"""
+function fcn2geom(z, ra, rb, ia, ib)
+    zr = ra*real(z) + rb
+    zi = ia*imag(z) + ib
+    return complex(zr, zi)
+end
+
+"""
+    geom2fcn(pt, ra, rb, ia, ib)
+
+Linearly map geometry values ∈ {`min_coord`, `max_coord`} to domain bounds.
+
+Note: There are floating point errors when converting back and forth.
+"""
+function geom2fcn(pt::IndexablePoint2D, ra, rb, ia, ib)
+    return complex((getx(pt) - rb)/ra, (gety(pt) - ib)/ia)
+end
+function geom2fcn(edge::VoronoiDelaunay.DelaunayEdge{IndexablePoint2D}, ra, rb, ia, ib)
+    return geom2fcn(geta(edge), ra, rb, ia, ib), geom2fcn(getb(edge), ra, rb, ia, ib)
 end
