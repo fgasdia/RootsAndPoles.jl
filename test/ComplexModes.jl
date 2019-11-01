@@ -46,37 +46,11 @@ end
 
 R = 1.0
 r = 0.15
-
-origcoords = diskdomain(R, r)
 tolerance = 1e-9
 
-rmin, rmax = minimum(real(origcoords)), maximum(real(origcoords))
-imin, imax = minimum(imag(origcoords)), maximum(imag(origcoords))
+origcoords = diskdomain(R, r)
 
-ra = (max_coord-min_coord)/(rmax-rmin)
-rb = max_coord - ra*rmax
-
-ia = (max_coord-min_coord)/(imax-imin)
-ib = max_coord - ia*imax
-
-origcoords = GRPF.GRPF.fcn2geom.(origcoords, ra, rb, ia, ib)
-newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
-tess = DelaunayTessellation2D{IndexablePoint2D}(5000)
-
-tess, 𝓔, quadrants = GRPF.tesselate!(tess, newnodes, pt -> complexmodes(GRPF.geom2fcn(pt, ra, rb, ia, ib)),
-                                   e -> GRPF.geom2fcn(e, ra, rb, ia, ib), tolerance)
-
-𝐶 = GRPF.contouredges(tess, 𝓔)
-regions = GRPF.evaluateregions!(𝐶, e -> GRPF.geom2fcn(e, ra, rb, ia, ib))
-
-zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, e -> GRPF.geom2fcn(e, ra, rb, ia, ib))
-
-sort!(zroots, by = x -> (round(real(x); digits=10), imag(x)))
-sort!(zpoles, by = x -> (round(real(x); digits=10), imag(x)))
-
-@test length(zroots) == 12
-@test length(zpoles) == 2
-
+# matlab results from https://github.com/PioKow/GRPF for comparison
 matlab_zroots = [-0.856115203791905 + 0.000000000114004im,
                  -0.775021521974263 + 0.000000000017321im,
                  -0.703772250164549 - 0.000000000209979im,
@@ -93,11 +67,6 @@ matlab_zroots = [-0.856115203791905 + 0.000000000114004im,
 matlab_zpoles = [0.000000000022863 - 0.100000000307523im,
                  0.000000000069120 + 0.100000000307523im]
 
-@test approxmatch(zroots, matlab_zroots)
-@test approxmatch(zpoles, matlab_zpoles)
-
-# grpf()
-origcoords = diskdomain(R, r)
 ggzroots, ggzpoles = grpf(complexmodes, origcoords, tolerance)
 
 @test approxmatch(ggzroots, matlab_zroots)
@@ -107,3 +76,34 @@ ggpzroots, ggpzpoles, quadrants, phasediffs = grpf(complexmodes, origcoords, tol
 
 @test approxmatch(ggpzroots, matlab_zroots)
 @test approxmatch(ggpzpoles, matlab_zpoles)
+
+
+#==
+More specific tests
+==#
+rmin, rmax = minimum(real(origcoords)), maximum(real(origcoords))
+imin, imax = minimum(imag(origcoords)), maximum(imag(origcoords))
+
+ra = (max_coord-min_coord)/(rmax-rmin)
+rb = max_coord - ra*rmax
+
+ia = (max_coord-min_coord)/(imax-imin)
+ib = max_coord - ia*imax
+
+origcoords = GRPF.fcn2geom.(origcoords, ra, rb, ia, ib)
+newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
+tess = DelaunayTessellation2D{IndexablePoint2D}(5000)
+
+tess, 𝓔, quadrants = GRPF.tesselate!(tess, newnodes, pt -> complexmodes(GRPF.geom2fcn(pt, ra, rb, ia, ib)),
+                                   e -> GRPF.geom2fcn(e, ra, rb, ia, ib), tolerance)
+
+𝐶 = GRPF.contouredges(tess, 𝓔)
+regions = GRPF.evaluateregions!(𝐶, e -> GRPF.geom2fcn(e, ra, rb, ia, ib))
+
+zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, e -> GRPF.geom2fcn(e, ra, rb, ia, ib))
+
+@test length(zroots) == 12
+@test length(zpoles) == 2
+
+@test approxmatch(zroots, matlab_zroots)
+@test approxmatch(zpoles, matlab_zpoles)

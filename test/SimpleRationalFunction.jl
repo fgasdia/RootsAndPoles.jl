@@ -12,6 +12,27 @@ tolerance = 1e-9
 
 origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 
+# matlab results from https://github.com/PioKow/GRPF for comparison
+matlab_zroots = [-0.999999999951224 - 0.000000000028656im,
+                  0.000000000253637 + 1.000000000074506im,
+                  1.000000000317046 - 0.000000000062088im]
+
+matlab_zpoles = [0.000000000380455 - 0.999999999701977im]
+
+ggzroots, ggzpoles = grpf(simplefcn, origcoords, tolerance)
+
+@test approxmatch(ggzroots, matlab_zroots)
+@test approxmatch(ggzpoles, matlab_zpoles)
+
+ggpzroots, ggpzpoles, quadrants, phasediffs = grpf(simplefcn, origcoords, tolerance, PlotData())
+
+@test approxmatch(ggpzroots, matlab_zroots)
+@test approxmatch(ggpzpoles, matlab_zpoles)
+
+
+#==
+More specific tests
+==#
 rmin, rmax = minimum(real(origcoords)), maximum(real(origcoords))
 imin, imax = minimum(imag(origcoords)), maximum(imag(origcoords))
 
@@ -36,20 +57,5 @@ zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, e -> GRPF.geom2fcn(e, ra
 @test length(zroots) == 3
 @test length(zpoles) == 1
 
-matlab_zroots = [-0.999999999951224 - 0.000000000028656im,
-                  0.000000000253637 + 1.000000000074506im,
-                  1.000000000317046 - 0.000000000062088im]
-
-matlab_zpoles = [0.000000000380455 - 0.999999999701977im]
-
-# grpf()
-origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
-ggzroots, ggzpoles = grpf(simplefcn, origcoords, tolerance)
-
-@test approxmatch(ggzroots, matlab_zroots)
-@test approxmatch(ggzpoles, matlab_zpoles)
-
-ggpzroots, ggpzpoles, quadrants, phasediffs = grpf(simplefcn, origcoords, tolerance, PlotData())
-
-@test approxmatch(ggpzroots, matlab_zroots)
-@test approxmatch(ggpzpoles, matlab_zpoles)
+@test approxmatch(zroots, matlab_zroots)
+@test approxmatch(zpoles, matlab_zpoles)

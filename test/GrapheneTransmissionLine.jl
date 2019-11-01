@@ -40,6 +40,33 @@ tolerance = 1e-9
 
 origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 
+# matlab results from https://github.com/PioKow/GRPF for comparison
+matlab_zroots = [-38.1777253145628 - 32.5295210454247im,
+                 -32.1019622517269 - 27.4308619361753im,
+                  32.1019622517269 + 27.4308619360714im,
+                  38.17772531429 + 32.5295210455806im,
+                  332.744888929695 + 282.243079954389im,
+                  336.220287339074 + 285.191091013829im,
+                  368.439467215558 + 312.522078059503im,
+                  371.007570834263 + 314.700407676927im]
+
+matlab_zpoles = [-2.30871731988513e-10 - 3.44963766202144im,
+                 -2.65852297441317e-10 + 3.4496376622893im]
+
+ggzroots, ggzpoles = grpf(graphenefunction, origcoords, tolerance)
+
+@test approxmatch(ggzroots, matlab_zroots)
+@test approxmatch(ggzpoles, matlab_zpoles)
+
+ggpzroots, ggpzpoles, quadrants, phasediffs = grpf(graphenefunction, origcoords, tolerance, PlotData())
+
+@test approxmatch(ggpzroots, matlab_zroots)
+@test approxmatch(ggpzpoles, matlab_zpoles)
+
+
+#==
+More specific tests
+==#
 rmin, rmax = minimum(real(origcoords)), maximum(real(origcoords))
 imin, imax = minimum(imag(origcoords)), maximum(imag(origcoords))
 
@@ -64,29 +91,5 @@ zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, e -> GRPF.geom2fcn(e, ra
 @test length(zroots) == 8
 @test length(zpoles) == 2
 
-matlab_zroots = [-38.1777253145628 - 32.5295210454247im,
-                 -32.1019622517269 - 27.4308619361753im,
-                  32.1019622517269 + 27.4308619360714im,
-                  38.17772531429 + 32.5295210455806im,
-                  332.744888929695 + 282.243079954389im,
-                  336.220287339074 + 285.191091013829im,
-                  368.439467215558 + 312.522078059503im,
-                  371.007570834263 + 314.700407676927im]
-
-matlab_zpoles = [-2.30871731988513e-10 - 3.44963766202144im,
-                 -2.65852297441317e-10 + 3.4496376622893im]
-
 @test approxmatch(zroots, matlab_zroots)
 @test approxmatch(zpoles, matlab_zpoles)
-
-# grpf
-origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
-ggzroots, ggzpoles = grpf(graphenefunction, origcoords, tolerance)
-
-@test approxmatch(ggzroots, matlab_zroots)
-@test approxmatch(ggzpoles, matlab_zpoles)
-
-ggpzroots, ggpzpoles, quadrants, phasediffs = grpf(graphenefunction, origcoords, tolerance, PlotData())
-
-@test approxmatch(ggpzroots, matlab_zroots)
-@test approxmatch(ggpzpoles, matlab_zpoles)

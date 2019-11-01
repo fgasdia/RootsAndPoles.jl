@@ -27,6 +27,31 @@ tolerance = 1e-9
 
 origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 
+# matlab results from https://github.com/PioKow/GRPF for comparison
+matlab_zroots = [1.096752543421462 - 0.000197146739811im,
+                 1.240454471623525 - 0.000133821833879im,
+                 1.353140429314226 - 0.000086139142513im,
+                 1.439795544324443 - 0.000052001606673im,
+                 1.504169866163284 - 0.000028029270470im,
+                 1.548692244058475 - 0.000012100953609im,
+                 1.574863045662642 - 0.000002974364907im]
+
+matlab_zpoles = ComplexF64[]
+
+ggzroots, ggzpoles = grpf(wvgd, origcoords, tolerance)
+
+@test approxmatch(ggzroots, matlab_zroots)
+@test approxmatch(ggzpoles, matlab_zpoles)
+
+ggpzroots, ggpzpoles, quadrants, phasediffs = grpf(wvgd, origcoords, tolerance, PlotData())
+
+@test approxmatch(ggpzroots, matlab_zroots)
+@test approxmatch(ggpzpoles, matlab_zpoles)
+
+
+#==
+More specific tests
+==#
 rmin, rmax = minimum(real(origcoords)), maximum(real(origcoords))
 imin, imax = minimum(imag(origcoords)), maximum(imag(origcoords))
 
@@ -51,24 +76,5 @@ zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, e -> GRPF.geom2fcn(e, ra
 @test length(zroots) == 7
 @test length(zpoles) == 0
 
-matlab_zroots = [1.096752543421462 - 0.000197146739811im,
-                 1.240454471623525 - 0.000133821833879im,
-                 1.353140429314226 - 0.000086139142513im,
-                 1.439795544324443 - 0.000052001606673im,
-                 1.504169866163284 - 0.000028029270470im,
-                 1.548692244058475 - 0.000012100953609im,
-                 1.574863045662642 - 0.000002974364907im]
-
-matlab_zpoles = ComplexF64[]
-
-# grpf()
-origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
-ggzroots, ggzpoles = grpf(wvgd, origcoords, tolerance)
-
-@test approxmatch(ggzroots, matlab_zroots)
-@test approxmatch(ggzpoles, matlab_zpoles)
-
-ggpzroots, ggpzpoles, quadrants, phasediffs = grpf(wvgd, origcoords, tolerance, PlotData())
-
-@test approxmatch(ggpzroots, matlab_zroots)
-@test approxmatch(ggpzpoles, matlab_zpoles)
+@test approxmatch(zroots, matlab_zroots)
+@test approxmatch(zpoles, matlab_zpoles)
