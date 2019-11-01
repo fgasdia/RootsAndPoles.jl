@@ -84,3 +84,31 @@ function diskdomain(R, Δr)
     end
     return newnodes
 end
+
+"""
+    mapfunctionval(z, ra, rb, ia, ib)
+
+Linearly map function values `z` within domain from `ra` to `rb` and `ia` to `ib`. Necessary
+because [VoronoiDelaunay.jl](https://github.com/JuliaGeometry/VoronoiDelaunay.jl) requires
+point coordinates be within `min_coord <= x <= max_coord` where `min_coord=1.0+eps(Float64)`
+and `max_coord=2.0-2eps(Float64)`.
+"""
+function mapfunctionval(z, ra, rb, ia, ib)
+    zr = ra*real(z) + rb
+    zi = ia*imag(z) + ib
+    return complex(zr, zi)
+end
+
+"""
+    geom2fcn(pt, ra, rb, ia, ib)
+
+Linearly map geometry values ∈ {`min_coord`, `max_coord`} to domain bounds.
+
+Note: There are floating point errors when converting back and forth.
+"""
+function geom2fcn(pt::IndexablePoint2D, ra, rb, ia, ib)
+    return complex((getx(pt) - rb)/ra, (gety(pt) - ib)/ia)
+end
+function geom2fcn(edge::VoronoiDelaunay.DelaunayEdge{IndexablePoint2D}, ra, rb, ia, ib)
+    return geom2fcn(geta(edge), ra, rb, ia, ib), geom2fcn(getb(edge), ra, rb, ia, ib)
+end
