@@ -56,6 +56,8 @@ function graphenefunction(z)
     YSTM = Slo + 1*a*kᵣ₀^2 + 1*b*kᵣ₀^2;
 
     w = (Y1TM + Y2TM + YSTM)*(-Y1TM + Y2TM + YSTM)*(Y1TM - Y2TM + YSTM)*(-Y1TM - Y2TM + YSTM) # four Riemann sheets
+
+    return w
 end
 ```
 
