@@ -17,13 +17,13 @@ using VoronoiDelaunay
 include("VoronoiDelaunayExtensions.jl")
 include("GeneralFunctions.jl")
 
-export rectangulardomain, diskdomain, grpf, grpf!, PhaseDiffs
+export rectangulardomain, diskdomain, grpf, grpf!, PlotData
 
 const MAXITERATIONS = 100
 const MAXNODES = 500000
 const SKINNYTRIANGLE = 3
 
-struct PhaseDiffs end
+struct PlotData end
 
 """
     quadrant(val)
@@ -107,7 +107,7 @@ end
 function candidateedges(
     tess::DelaunayTessellation2D{IndexablePoint2D},
     quadrants::Vector{Int8},
-    ::PhaseDiffs
+    ::PlotData
     )
 
     𝓔 = Vector{DelaunayEdge{IndexablePoint2D}}()
@@ -544,7 +544,7 @@ function tesselate!(
     fcn::Function,
     geom2fcn::Function,
     tolerance,
-    ::PhaseDiffs
+    ::PlotData
     )
 
     # Initialize
@@ -568,7 +568,7 @@ function tesselate!(
         numnodes += numnewnodes
 
         # Determine candidate edges that may be near a root or pole
-        𝓔, phasediffs = candidateedges(tess, quadrants, PhaseDiffs())
+        𝓔, phasediffs = candidateedges(tess, quadrants, PlotData())
         isempty(𝓔) && error("No roots in the domain")
 
         # Select candidate edges that are longer than the chosen tolerance
@@ -662,7 +662,7 @@ function grpf(fcn::Function, origcoords::AbstractArray, tolerance, tess_size_hin
 end
 
 """
-    grpf(fcn, origcoords, tolerance, ::PhaseDiffs, tess_size_hint=5000)
+    grpf(fcn, origcoords, tolerance, ::PlotData, tess_size_hint=5000)
 
 Variant of `grpf` that returns `quadrants` and `phasediffs` in addition to `zroots` and
 `zpoles`, primarily for plotting or diagnostics.
@@ -681,7 +681,7 @@ julia> tolerance = 1e-9
 
 julia> origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 
-julia> roots, poles, quadrants, phasediffs = grpf(simplefcn, origcoords, tolerance, PhaseDiffs());
+julia> roots, poles, quadrants, phasediffs = grpf(simplefcn, origcoords, tolerance, PlotData());
 
 julia> roots
 3-element Array{Complex{Float64},1}:
@@ -696,7 +696,7 @@ julia> roots
 
 See also: [`grpf`](@ref)
 """
-function grpf(fcn::Function, origcoords::AbstractArray, tolerance, ::PhaseDiffs, tess_size_hint=5000)
+function grpf(fcn::Function, origcoords::AbstractArray, tolerance, ::PlotData, tess_size_hint=5000)
     # Need to map space domain for VoronoiDelaunay.jl
     rmin, rmax = minimum(real(origcoords)), maximum(real(origcoords))
     imin, imax = minimum(imag(origcoords)), maximum(imag(origcoords))
@@ -716,7 +716,7 @@ function grpf(fcn::Function, origcoords::AbstractArray, tolerance, ::PhaseDiffs,
     f = pt -> fcn(geom2fcn(pt, ra, rb, ia, ib))
     g = z -> geom2fcn(z, ra, rb, ia, ib)
 
-    tess, 𝓔, quadrants, phasediffs = tesselate!(tess, newnodes, f, g, tolerance, PhaseDiffs())
+    tess, 𝓔, quadrants, phasediffs = tesselate!(tess, newnodes, f, g, tolerance, PlotData())
     𝐶 = contouredges(tess, 𝓔)
     regions = evaluateregions!(𝐶, g)
     zroots, zpoles = rootsandpoles(regions, quadrants, g)
