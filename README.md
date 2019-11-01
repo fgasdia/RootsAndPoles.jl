@@ -24,7 +24,7 @@ GRPF first samples the function on a triangular mesh through Delaunay triangulat
 
 Consider a simple transmission line consisting of a thin graphene layer on a silicone substrate. See Section III. C. of Kowalczyk, 2018 (below) for details.
 
-First, define the single (complex) argument function for which we seek roots and poles. The normalized propagation coefficient _z_ for TM modes at frequency `f` can be found from the equation `graphenefunction(z)`.
+First, define the single (complex) argument function for which we seek roots and poles. The normalized propagation coefficient `z` for TM modes at frequency `f` can be found from the equation `graphenefunction(z)`.
 ```julia
 function graphenefunction(z)
     f = 1e12
@@ -61,12 +61,12 @@ end
 
 Next, define parameters for the initial grid.
 ```julia
-    xb = -100  # real part begin
-    xe = 400  # real part end
-    yb = -100  # imag part begin
-    ye = 400  # imag part end
-    r = 18  # initial mesh step
-    tolerance = 1e-9
+xb = -100  # real part begin
+xe = 400  # real part end
+yb = -100  # imag part begin
+ye = 400  # imag part end
+r = 18  # initial mesh step
+tolerance = 1e-9
 ```
 
 This package includes functions for rectangular and disk shaped domains, but any shape can be used. `origcoords` below is simply a vector of complex numbers containing the original mesh coordinates which will be Delaunay triangulated. For maximum efficiency, the original mesh nodes should form equilateral triangles.
