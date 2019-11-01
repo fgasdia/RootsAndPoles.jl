@@ -646,7 +646,7 @@ function grpf(fcn::Function, origcoords::AbstractArray, tolerance, tess_size_hin
     ia = width/(imax-imin)
     ib = max_coord - ia*imax
 
-    origcoords = mapfunctionval.(origcoords, ra, rb, ia, ib)
+    origcoords = fcn2geom.(origcoords, ra, rb, ia, ib)
     newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
     tess = DelaunayTessellation2D{IndexablePoint2D}(tess_size_hint)
 
@@ -709,7 +709,7 @@ function grpf(fcn::Function, origcoords::AbstractArray, tolerance, ::PhaseDiffs,
     ia = width/(imax-imin)
     ib = max_coord - ia*imax
 
-    origcoords = mapfunctionval.(origcoords, ra, rb, ia, ib)
+    origcoords = fcn2geom.(origcoords, ra, rb, ia, ib)
     newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
     tess = DelaunayTessellation2D{IndexablePoint2D}(tess_size_hint)
 

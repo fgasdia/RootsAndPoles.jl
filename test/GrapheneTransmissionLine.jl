@@ -49,7 +49,7 @@ rb = max_coord - ra*rmax
 ia = (max_coord-min_coord)/(imax-imin)
 ib = max_coord - ia*imax
 
-origcoords = GRPF.mapfunctionval.(origcoords, ra, rb, ia, ib)
+origcoords = GRPF.fcn2geom.(origcoords, ra, rb, ia, ib)
 newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
 tess = DelaunayTessellation2D{IndexablePoint2D}(2000)
 

@@ -86,14 +86,15 @@ function diskdomain(R, Δr)
 end
 
 """
-    mapfunctionval(z, ra, rb, ia, ib)
+    fcn2geom(z, ra, rb, ia, ib)
 
 Linearly map function values `z` within domain from `ra` to `rb` and `ia` to `ib`. Necessary
 because [VoronoiDelaunay.jl](https://github.com/JuliaGeometry/VoronoiDelaunay.jl) requires
 point coordinates be within `min_coord <= x <= max_coord` where `min_coord=1.0+eps(Float64)`
-and `max_coord=2.0-2eps(Float64)`.
+and `max_coord=2.0-2eps(Float64)`. `max_coord` and `min_coord` are provided by
+`VoronoiDelaunay.jl`
 """
-function mapfunctionval(z, ra, rb, ia, ib)
+function fcn2geom(z, ra, rb, ia, ib)
     zr = ra*real(z) + rb
     zi = ia*imag(z) + ib
     return complex(zr, zi)
