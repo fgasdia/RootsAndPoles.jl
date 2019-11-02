@@ -17,7 +17,7 @@ GRPF first samples the function on a triangular mesh through Delaunay triangulat
 ### Installation
 
 ```julia
-]add https://github.com/EP-Guy/GRPF.jl
+]add https://github.com/fgasdia/GRPF.jl
 ```
 
 ### Example Problem
