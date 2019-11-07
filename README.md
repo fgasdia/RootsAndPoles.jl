@@ -1,6 +1,6 @@
 # GRPF.jl: Global complex Roots and Poles Finding in Julia
 
-[![Build Status](https://travis-ci.com/EP-Guy/GRPF.jl.svg?token=U9y2eEri8JFAZrWUCrwX&branch=master)](https://travis-ci.com/EP-Guy/GRPF.jl) [![Build status](https://ci.appveyor.com/api/projects/status/gioglmp08jcivc7h?svg=true)](https://ci.appveyor.com/project/EP-Guy/grpf-jl) [![DOI](https://zenodo.org/badge/154031378.svg)](https://zenodo.org/badge/latestdoi/154031378)
+[![Build Status](https://travis-ci.com/fgasdia/GRPF.jl.svg?branch=master)](https://travis-ci.com/fgasdia/GRPF.jl) [![Build status](https://ci.appveyor.com/api/projects/status/megpgn8l1ej5m3ww?svg=true)](https://ci.appveyor.com/project/fgasdia/grpf-jl) [![DOI](https://zenodo.org/badge/154031378.svg)](https://zenodo.org/badge/latestdoi/154031378)
 
 A Julia implementation of [GRPF](https://github.com/PioKow/GRPF) by Dr. Piotr Kowalczyk.
 
