@@ -19,8 +19,8 @@ Base.:/(p1::IndexablePoint2D, n::Real) = IndexablePoint2D(getx(p1)/n, gety(p1)/n
 
 # Improved performance of `delaunayedges()`
 # see: https://github.com/JuliaGeometry/VoronoiDelaunay.jl/issues/47
-function delaunayedges_fast(t::DelaunayTessellation2D)
-    result = DelaunayEdge[]
+function delaunayedges_fast(t::DelaunayTessellation2D{T}) where T <: AbstractPoint2D
+    result = DelaunayEdge{T}[]
     for ix in 2:t._last_trig_index
         tr = t._trigs[ix]
         isexternal(tr) && continue

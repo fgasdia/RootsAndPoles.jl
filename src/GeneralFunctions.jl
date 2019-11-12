@@ -6,7 +6,7 @@ function distance(p1::AbstractPoint2D, p2::AbstractPoint2D)
     return sqrt((getx(p2)-getx(p1))^2 + (gety(p2)-gety(p1))^2)
 end
 distance(e::DelaunayEdge) = distance(getb(e), geta(e))
-function distance(p1arr::AbstractArray{IndexablePoint2D}, p2::IndexablePoint2D)
+function distance(p1arr::AbstractArray{AbstractPoint2D}, p2::AbstractPoint2D)
     return sqrt.((getx.(p1arr).-getx(p2)).^2 .+ (gety.(p1arr).-gety(p2)).^2)
 end
 
@@ -15,8 +15,8 @@ end
 
 Return true if `edge` has length greater than `tolerance`.
 """
-function longedge(edge::DelaunayEdge, tolerance, geom2fcn::Function)
-    return distance(geom2fcn(edge)) > tolerance
+function longedge(edge::DelaunayEdge, tolerance, g2f::Geometry2Function)
+    return distance(g2f(edge)) > tolerance
 end
 
 """
@@ -106,9 +106,9 @@ Linearly map geometry values ∈ {`min_coord`, `max_coord`} to domain bounds.
 
 Note: There are floating point errors when converting back and forth.
 """
-function geom2fcn(pt::IndexablePoint2D, ra, rb, ia, ib)
+function geom2fcn(pt::AbstractPoint2D, ra, rb, ia, ib)
     return complex((getx(pt) - rb)/ra, (gety(pt) - ib)/ia)
 end
-function geom2fcn(edge::VoronoiDelaunay.DelaunayEdge{IndexablePoint2D}, ra, rb, ia, ib)
+function geom2fcn(edge::VoronoiDelaunay.DelaunayEdge{P}, ra, rb, ia, ib) where P <: AbstractPoint2D
     return geom2fcn(geta(edge), ra, rb, ia, ib), geom2fcn(getb(edge), ra, rb, ia, ib)
 end

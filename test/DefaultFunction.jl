@@ -1,13 +1,13 @@
 function defaultfcn(z)
-      f = 1e9
-      ϵᵣ = 5 - 2im
-      μᵣ = 1 - 2im
-      d = 1e-2
-      c = 3e8
-      ω = 2π*f
-      k₀ = ω/c
-      cc = ϵᵣ^2*(k₀*d)^2*(ϵᵣ*μᵣ - 1)
-      w = ϵᵣ^2*z^2 + z^2*tan(z)^2 - cc
+    f = 1e9
+    ϵᵣ = 5 - 2im
+    μᵣ = 1 - 2im
+    d = 1e-2
+    c = 3e8
+    ω = 2π*f
+    k₀ = ω/c
+    cc = ϵᵣ^2*(k₀*d)^2*(ϵᵣ*μᵣ - 1)
+    w = ϵᵣ^2*z^2 + z^2*tan(z)^2 - cc
 end
 
 # Analysis parameters
@@ -58,13 +58,15 @@ origcoords = GRPF.fcn2geom.(origcoords, ra, rb, ia, ib)
 newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
 tess = DelaunayTessellation2D{IndexablePoint2D}(2000)
 
-tess, 𝓔, quadrants = GRPF.tesselate!(tess, newnodes, pt -> defaultfcn(GRPF.geom2fcn(pt, ra, rb, ia, ib)),
-                                   e -> GRPF.geom2fcn(e, ra, rb, ia, ib), tolerance)
+f = GRPF.ScaledFunction(defaultfcn, ra, rb, ia, ib)
+g2f = GRPF.Geometry2Function(ra, rb, ia, ib)
+
+tess, 𝓔, quadrants = GRPF.tesselate!(tess, newnodes, f, g2f, tolerance)
 
 𝐶 = GRPF.contouredges(tess, 𝓔)
-regions = GRPF.evaluateregions!(𝐶, e -> GRPF.geom2fcn(e, ra, rb, ia, ib))
+regions = GRPF.evaluateregions!(𝐶, g2f)
 
-zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, e -> GRPF.geom2fcn(e, ra, rb, ia, ib))
+zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, g2f)
 
 @test length(zroots) == 6
 @test length(zpoles) == 2
