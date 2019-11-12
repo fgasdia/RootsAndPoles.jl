@@ -24,7 +24,7 @@ ggzroots, ggzpoles = grpf(simplefcn, origcoords, tolerance)
 @test approxmatch(ggzroots, matlab_zroots)
 @test approxmatch(ggzpoles, matlab_zpoles)
 
-ggpzroots, ggpzpoles, quadrants, phasediffs = grpf(simplefcn, origcoords, tolerance, PlotData())
+ggpzroots, ggpzpoles, quadrants, phasediffs, tess = grpf(simplefcn, origcoords, tolerance, PlotData())
 
 @test approxmatch(ggpzroots, matlab_zroots)
 @test approxmatch(ggpzpoles, matlab_zpoles)

@@ -655,8 +655,8 @@ julia> roots
 """
 function grpf(fcn::Function, origcoords::AbstractArray, tolerance, tess_size_hint=5000)
     # Need to map space domain for VoronoiDelaunay.jl
-    rmin, rmax = minimum(real(origcoords)), maximum(real(origcoords))
-    imin, imax = minimum(imag(origcoords)), maximum(imag(origcoords))
+    rmin, rmax = minimum(real, origcoords), maximum(real, origcoords)
+    imin, imax = minimum(imag, origcoords), maximum(imag, origcoords)
 
     # `max_coord` and `min_coord` are provided by `VoronoiDelaunay.jl`
     width = max_coord - min_coord
@@ -667,6 +667,9 @@ function grpf(fcn::Function, origcoords::AbstractArray, tolerance, tess_size_hin
     ib = max_coord - ia*imax
 
     origcoords = fcn2geom.(origcoords, ra, rb, ia, ib)
+    @assert minimum(real, origcoords) >= min_coord && minimum(imag, origcoords) >= min_coord &&
+        maximum(real, origcoords) <= max_coord && maximum(imag, origcoords) <= max_coord "Scaled coordinates out of bounds"
+
     newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
     tess = DelaunayTessellation2D{IndexablePoint2D}(tess_size_hint)
 
@@ -716,8 +719,8 @@ julia> roots
 """
 function grpf(fcn::Function, origcoords::AbstractArray, tolerance, ::PlotData, tess_size_hint=5000)
     # Need to map space domain for VoronoiDelaunay.jl
-    rmin, rmax = minimum(real(origcoords)), maximum(real(origcoords))
-    imin, imax = minimum(imag(origcoords)), maximum(imag(origcoords))
+    rmin, rmax = minimum(real, origcoords), maximum(real, origcoords)
+    imin, imax = minimum(imag, origcoords), maximum(imag, origcoords)
 
     # `max_coord` and `min_coord` are provided by `VoronoiDelaunay.jl`
     width = max_coord - min_coord
@@ -728,6 +731,9 @@ function grpf(fcn::Function, origcoords::AbstractArray, tolerance, ::PlotData, t
     ib = max_coord - ia*imax
 
     origcoords = fcn2geom.(origcoords, ra, rb, ia, ib)
+    @assert minimum(real, origcoords) >= min_coord && minimum(imag, origcoords) >= min_coord &&
+        maximum(real, origcoords) <= max_coord && maximum(imag, origcoords) <= max_coord "Scaled coordinates out of bounds"
+
     newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
     tess = DelaunayTessellation2D{IndexablePoint2D}(tess_size_hint)
 
@@ -739,7 +745,7 @@ function grpf(fcn::Function, origcoords::AbstractArray, tolerance, ::PlotData, t
     regions = evaluateregions!(𝐶, g2f)
     zroots, zpoles = rootsandpoles(regions, quadrants, g2f)
 
-    return zroots, zpoles, quadrants, phasediffs
+    return zroots, zpoles, quadrants, phasediffs, tess
 end
 
 end # module

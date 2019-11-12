@@ -58,7 +58,7 @@ ggzroots, ggzpoles = grpf(graphenefunction, origcoords, tolerance)
 @test approxmatch(ggzroots, matlab_zroots)
 @test approxmatch(ggzpoles, matlab_zpoles)
 
-ggpzroots, ggpzpoles, quadrants, phasediffs = grpf(graphenefunction, origcoords, tolerance, PlotData())
+ggpzroots, ggpzpoles, quadrants, phasediffs, tess = grpf(graphenefunction, origcoords, tolerance, PlotData())
 
 @test approxmatch(ggpzroots, matlab_zroots)
 @test approxmatch(ggpzpoles, matlab_zpoles)
