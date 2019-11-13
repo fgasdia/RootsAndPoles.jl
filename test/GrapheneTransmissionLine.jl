@@ -58,7 +58,7 @@ ggzroots, ggzpoles = grpf(graphenefunction, origcoords, tolerance)
 @test approxmatch(ggzroots, matlab_zroots)
 @test approxmatch(ggzpoles, matlab_zpoles)
 
-ggpzroots, ggpzpoles, quadrants, phasediffs = grpf(graphenefunction, origcoords, tolerance, PlotData())
+ggpzroots, ggpzpoles, quadrants, phasediffs, tess = grpf(graphenefunction, origcoords, tolerance, PlotData())
 
 @test approxmatch(ggpzroots, matlab_zroots)
 @test approxmatch(ggpzpoles, matlab_zpoles)
@@ -80,13 +80,15 @@ origcoords = GRPF.fcn2geom.(origcoords, ra, rb, ia, ib)
 newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
 tess = DelaunayTessellation2D{IndexablePoint2D}(2000)
 
-tess, 𝓔, quadrants = GRPF.tesselate!(tess, newnodes, pt -> graphenefunction(GRPF.geom2fcn(pt, ra, rb, ia, ib)),
-                                     e -> GRPF.geom2fcn(e, ra, rb, ia, ib), tolerance)
+f = GRPF.ScaledFunction(graphenefunction, ra, rb, ia, ib)
+g2f = GRPF.Geometry2Function(ra, rb, ia, ib)
+
+tess, 𝓔, quadrants = GRPF.tesselate!(tess, newnodes, f, g2f, tolerance)
 
 𝐶 = GRPF.contouredges(tess, 𝓔)
-regions = GRPF.evaluateregions!(𝐶, e -> GRPF.geom2fcn(e, ra, rb, ia, ib))
+regions = GRPF.evaluateregions!(𝐶, g2f)
 
-zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, e -> GRPF.geom2fcn(e, ra, rb, ia, ib))
+zroots, zpoles = GRPF.rootsandpoles(regions, quadrants, g2f)
 
 @test length(zroots) == 8
 @test length(zpoles) == 2
