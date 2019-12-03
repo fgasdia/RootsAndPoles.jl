@@ -11,7 +11,6 @@ module GRPF
 
 using LinearAlgebra
 using StaticArrays
-import GeometricalPredicates: intriangle
 using VoronoiDelaunay
 
 const MAXITERATIONS = 100
