@@ -13,6 +13,6 @@ matrix:
     - julia: nightly
 branches:
   only:
-    - master
+    - dev
     - /^v[0-9]+\.[0-9]+\.[0-9]+$/ # version tags for Documenter.jl, see # 298
     - /^release-.*$/
