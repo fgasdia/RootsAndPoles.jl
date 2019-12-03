@@ -26,6 +26,7 @@ struct Geometry2Function
     ib::Float64
 end
 (f::Geometry2Function)(z) = geom2fcn(z, f.ra, f.rb, f.ia, f.ib)
+(f::Geometry2Function)(x, y) = geom2fcn(x, y, f.ra, f.rb, f.ia, f.ib)
 
 struct ScaledFunction{T <: Function}
     f::T
@@ -744,7 +745,7 @@ function grpf(fcn::Function, origcoords::AbstractArray, tolerance, ::PlotData, t
     regions = evaluateregions!(𝐶, g2f)
     zroots, zpoles = rootsandpoles(regions, quadrants, g2f)
 
-    return zroots, zpoles, quadrants, phasediffs, tess
+    return zroots, zpoles, quadrants, phasediffs, tess, g2f
 end
 
 end # module
