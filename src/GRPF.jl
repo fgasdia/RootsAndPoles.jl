@@ -1,11 +1,13 @@
 __precompile__(true)
 
+# NOTE: Matlab files ('.m') referenced with `MATLAB: `  refer to the git repo:
+# https://github.com/PioKow/GRPF
+
 """
 # GRPF: Global complex Roots and Poles Finding algorithm
 
 A Julia implementation of the GRPF (https://github.com/PioKow/GRPF) by Piotr
-Kowalczyk. Matlab files ('.m') listed in _see also_ sections of function doc strings refer
-to this git repo.
+Kowalczyk.
 """
 module GRPF
 
@@ -43,12 +45,11 @@ include("GeneralFunctions.jl")
 
 export rectangulardomain, diskdomain, grpf, PlotData
 
+# MATLAB: `vinq.m`
 """
     quadrant(val)
 
 Convert complex function value `val` to quadrant number.
-
-See also: `vinq.m`
 """
 @inline function quadrant(val::Complex)::Int8
     rv, iv = reim(val)
@@ -359,13 +360,12 @@ function splittriangles(
     return zone1triangles, zone2triangles
 end
 
+# MATLAB: `FindNextNode.m`
 """
     findnextnode(prevnode, refnode, tempnodes, g2f)
 
 Find the index of the next node in the candidate region boundary process. The next one (after
 the reference) is picked from the fixed set of nodes.
-
-See also: `FindNextNode.m`
 """
 function findnextnode(
     prevnode::IndexablePoint2D,
@@ -396,13 +396,11 @@ function findnextnode(
     return findmin(ϕs)[2]  # return index of minimum `ϕ`
 end
 
+# TODO: Go in reverse (from `end` rather than `1` so we don't popfirst!) or use careful indexing
+# and don't pop at all
+# NOTE: The nodes of each region are in reverse order compared to Matlab wrt their quadrants?
 """
     evaluateregions!(𝐶, g2f)
-
-TODO: Go in reverse (from `end` rather than `1` so we don't popfirst!) or use careful indexing
-and don't pop at all
-
-# Note: The nodes of each region are in reverse order compared to Matlab wrt their quadrants?
 """
 function evaluateregions!(
     𝐶::Vector{DelaunayEdge{IndexablePoint2D}},
@@ -575,15 +573,11 @@ function tesselate!(
     iteration = 0
     while (iteration < MAXITERATIONS) && (numnodes < MAXNODES)
         iteration += 1
-        # @info iteration
-        # @info "yep"
 
         # Determine which quadrant function value belongs at each node
         numnewnodes = length(newnodes)
         append!(quadrants, Vector{Int8}(undef, numnewnodes))
         assignquadrants!(quadrants, newnodes, f)
-
-        # @info "Quadrants assigned"
 
         # Add new nodes to `tess`
         push!(tess, newnodes)
