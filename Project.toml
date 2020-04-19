@@ -1,7 +1,7 @@
 name = "GRPF"
 uuid = "a0859a10-ccb4-11e8-145d-674b3750773a"
 authors = ["Forrest Gasdia <EP-Guy@users.noreply.github.com>"]
-version = "0.3.0"
+version = "0.3.1"
 
 [deps]
 GeometricalPredicates = "fd0ad045-b25c-564e-8f9c-8ef5c5f21267"
