@@ -17,6 +17,13 @@ const MAXITERATIONS = 100
 const MAXNODES = 500000
 const SKINNYTRIANGLE = 3
 
+# NOTE: `max_coord` and `min_coord` are provided by `VoronoiDelaunay.jl`
+# We are even more conservative than going from `max_coord` to
+# `min_coords` because it is possible to run into floating point issues at
+# the very limits
+const MAXCOORD = nextfloat(max_coord, -10)
+const MINCOORD = nextfloat(min_coord, 10)
+
 struct PlotData end
 
 struct Geometry2Function
@@ -654,19 +661,25 @@ julia> roots
 ```
 """
 function grpf(fcn::Function, origcoords::AbstractArray, tolerance, tess_size_hint=5000)
+
+    # TODO: See pull request #50 on VoronoiDelaunay.jl which handles the space
+    # mapping automatically.
+
     # Need to map space domain for VoronoiDelaunay.jl
     rmin, rmax = minimum(real, origcoords), maximum(real, origcoords)
     imin, imax = minimum(imag, origcoords), maximum(imag, origcoords)
 
-    # `max_coord` and `min_coord` are provided by `VoronoiDelaunay.jl`
-    width = max_coord - min_coord
+    # Be slightly conservative with our scaling to ensure we stay inside of
+    # VoronoiDelaunay.jl `max_coord` and `min_coord`
+    width = MAXCOORD - MINCOORD
     ra = width/(rmax-rmin)
-    rb = max_coord - ra*rmax
+    rb = MAXCOORD - ra*rmax
 
     ia = width/(imax-imin)
-    ib = max_coord - ia*imax
+    ib = MAXCOORD - ia*imax
 
     origcoords = fcn2geom.(origcoords, ra, rb, ia, ib)
+
     @assert minimum(real, origcoords) >= min_coord && minimum(imag, origcoords) >= min_coord &&
         maximum(real, origcoords) <= max_coord && maximum(imag, origcoords) <= max_coord "Scaled coordinates out of bounds"
 
@@ -722,13 +735,14 @@ function grpf(fcn::Function, origcoords::AbstractArray, tolerance, ::PlotData, t
     rmin, rmax = minimum(real, origcoords), maximum(real, origcoords)
     imin, imax = minimum(imag, origcoords), maximum(imag, origcoords)
 
-    # `max_coord` and `min_coord` are provided by `VoronoiDelaunay.jl`
-    width = max_coord - min_coord
+    # Be slightly conservative with our scaling to ensure we stay inside of
+    # VoronoiDelaunay.jl `max_coord` and `min_coord`
+    width = MAXCOORD - MINCOORD
     ra = width/(rmax-rmin)
-    rb = max_coord - ra*rmax
+    rb = MAXCOORD - ra*rmax
 
     ia = width/(imax-imin)
-    ib = max_coord - ia*imax
+    ib = MAXCOORD - ia*imax
 
     origcoords = fcn2geom.(origcoords, ra, rb, ia, ib)
     @assert minimum(real, origcoords) >= min_coord && minimum(imag, origcoords) >= min_coord &&
