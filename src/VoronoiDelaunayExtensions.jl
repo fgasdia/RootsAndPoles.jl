@@ -66,12 +66,11 @@ function Base.:(==)(e1::DelaunayEdge{IndexablePoint2D},e2::DelaunayEdge{Indexabl
     return false
 end
 
-
 # Improved performance of `delaunayedges()`
 # see: https://github.com/JuliaGeometry/VoronoiDelaunay.jl/issues/47
 function delaunayedges_fast(t::DelaunayTessellation2D{T}) where T <: AbstractPoint2D
     result = DelaunayEdge{T}[]
-    for ix in 2:t._last_trig_index
+    @inbounds for ix in 2:t._last_trig_index
         tr = t._trigs[ix]
         isexternal(tr) && continue
 

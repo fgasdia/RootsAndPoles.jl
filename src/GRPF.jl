@@ -134,23 +134,45 @@ function candidateedges(
 
     E = Vector{DelaunayEdge{IndexablePoint2D}}()
 
-    for edge in delaunayedges_fast(tess)
-        nodea, nodeb = geta(edge), getb(edge)
-        idxa, idxb = getindex(nodea), getindex(nodeb)
+    # Improved performance of `delaunayedges()`
+    # see: https://github.com/JuliaGeometry/VoronoiDelaunay.jl/issues/47
+    @inbounds for ix in 2:tess._last_trig_index
+        tr = tess._trigs[ix]
+        isexternal(tr) && continue
 
-        # NOTE: To match Matlab, force `idxa` < `idxb`
-        # Count of phasediffs `ΔQ` of value 1 and 3 can differ from Matlab
-        # because it depends on "direction" of edge.
-        # (order doesn't matter for `ΔQ == 2`, which is the only case we care about)
-        # if idxa > idxb
-        #     idxa, idxb = idxb, idxa
-        # end
+        ix_na = tr._neighbour_a
+        if (ix_na > ix) | isexternal(tess._trigs[ix_na])
+            btr, ctr = getb(tr), getc(tr)
+            ΔQ = mod(quadrants[getindex(btr)] - quadrants[getindex(ctr)], 4)  # phase difference
+            if ΔQ == 2
+                edge = DelaunayEdge(btr, ctr)
+                push!(E, edge)
+            end
+        end
 
-        @inbounds ΔQ = mod(quadrants[idxa] - quadrants[idxb], 4)  # phase difference
-        if ΔQ == 2
-            push!(E, edge)
+        ix_nb = tr._neighbour_b
+        if (ix_nb > ix) | isexternal(tess._trigs[ix_nb])
+            atr, ctr = geta(tr), getc(tr)
+            ΔQ = mod(quadrants[getindex(atr)] - quadrants[getindex(ctr)], 4)
+            if ΔQ == 2
+                edge = DelaunayEdge(atr, ctr)
+                push!(E, edge)
+            end
+        end
+
+        ix_nc = tr._neighbour_c
+        if (ix_nc > ix) | isexternal(tess._trigs[ix_nc])
+            atr, btr = geta(tr), getb(tr)
+            ΔQ = mod(quadrants[getindex(atr)] - quadrants[getindex(btr)], 4)
+            if ΔQ == 2
+                edge = DelaunayEdge(atr, btr)
+                push!(E, edge)
+            end
         end
     end
+
+    unique!(E)
+
     return E
 end
 
@@ -201,10 +223,12 @@ function counttriangleswithnodes(
     # Get unique indices of nodes in `edges`
     idxs = uniqueindices(edges)
 
+    # TODO: just push into triangle counts instead?
     # Build vector for counting number of edge nodes in each triangle
     n = 0
-    @inbounds for i in eachindex(tess._trigs)
-        if !isexternal(tess._trigs[i])
+    for i in eachindex(tess._trigs)
+        @inbounds triangle = tess._trigs[i]
+        if !isexternal(triangle)
             n += 1
         end
     end
@@ -432,7 +456,8 @@ function evaluateregions!(
     C::Vector{DelaunayEdge{IndexablePoint2D}},
     g2f::Geometry2Function
     )
-    # TODO: do this without the `popfirst!`s and `deleteat!`s
+    # TODO: do this without the `popfirst!`s and `deleteat!`s?
+    # low priority because this function has negligible time
 
     # NOTE: The nodes of each region are in reverse order compared to Matlab
     # with respect to their quadrants
@@ -550,6 +575,7 @@ function tesselate!(
 
     g2f = f.g2f
 
+    # TODO: What happens with this E?
     E = Vector{DelaunayEdge{IndexablePoint2D}}()
     quadrants = Vector{Int8}()
 
