@@ -37,6 +37,12 @@ const MINCOORD = nextfloat(min_coord, 10)
 
 struct PlotData end
 
+"""
+    Geometry2Function
+
+Store conversion coefficients from the `VoronoiDelaunay` domain to the original
+function domain.
+"""
 struct Geometry2Function
     ra::Float64
     rb::Float64
@@ -46,14 +52,18 @@ end
 (f::Geometry2Function)(z) = geom2fcn(z, f.ra, f.rb, f.ia, f.ib)
 (f::Geometry2Function)(x, y) = geom2fcn(x, y, f.ra, f.rb, f.ia, f.ib)
 
+"""
+    ScaledFunction{T<:Function}
+
+Store conversion coefficients from the `VoronoiDelaunay` domain to the original
+function domain so that a `ScaledFunction` can be called in place of the original
+function when providing an argument in the `VoronoiDelaunay` domain.
+"""
 struct ScaledFunction{T <: Function}
     f::T
-    ra::Float64
-    rb::Float64
-    ia::Float64
-    ib::Float64
+    g2f::Geometry2Function
 end
-(f::ScaledFunction)(z) = f.f(geom2fcn(z, f.ra, f.rb, f.ia, f.ib))
+(f::ScaledFunction)(z) = f.f(f.g2f(z))
 
 # These files need the above structs defined
 include("VoronoiDelaunayExtensions.jl")
@@ -531,13 +541,14 @@ function tesselate!(
     tess::DelaunayTessellation2D{IndexablePoint2D},
     newnodes::Vector{IndexablePoint2D},
     f::ScaledFunction,
-    g2f::Geometry2Function,
     tolerance
     )
 
     # Initialize
     numnodes = tess._total_points_added
     @assert numnodes == 0
+
+    g2f = f.g2f
 
     E = Vector{DelaunayEdge{IndexablePoint2D}}()
     quadrants = Vector{Int8}()
@@ -586,7 +597,6 @@ function tesselate!(
     tess::DelaunayTessellation2D{IndexablePoint2D},
     newnodes::Vector{IndexablePoint2D},
     f::ScaledFunction,
-    g2f::Geometry2Function,
     tolerance,
     ::PlotData
     )
@@ -594,6 +604,8 @@ function tesselate!(
     # Initialize
     numnodes = tess._total_points_added
     @assert numnodes == 0
+
+    g2f = f.g2f
 
     E = Vector{DelaunayEdge{IndexablePoint2D}}()
     quadrants = Vector{Int8}()
@@ -697,10 +709,11 @@ function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, tolerance, te
     newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
     tess = DelaunayTessellation2D{IndexablePoint2D}(tess_size_hint)
 
-    f = ScaledFunction(fcn, ra, rb, ia, ib)
     g2f = Geometry2Function(ra, rb, ia, ib)
+    f = ScaledFunction(fcn, g2f)
 
-    tess, E, quadrants = tesselate!(tess, newnodes, f, g2f, tolerance)
+
+    tess, E, quadrants = tesselate!(tess, newnodes, f, tolerance)
     C = contouredges(tess, E)
     regions = evaluateregions!(C, g2f)
     zroots, zpoles = rootsandpoles(regions, quadrants, g2f)
@@ -762,10 +775,10 @@ function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, tolerance, ::
     newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
     tess = DelaunayTessellation2D{IndexablePoint2D}(tess_size_hint)
 
-    f = ScaledFunction(fcn, ra, rb, ia, ib)
     g2f = Geometry2Function(ra, rb, ia, ib)
+    f = ScaledFunction(fcn, g2f)
 
-    tess, E, quadrants, phasediffs = tesselate!(tess, newnodes, f, g2f, tolerance, PlotData())
+    tess, E, quadrants, phasediffs = tesselate!(tess, newnodes, f, tolerance, PlotData())
     C = contouredges(tess, E)
     regions = evaluateregions!(C, g2f)
     zroots, zpoles = rootsandpoles(regions, quadrants, g2f)
