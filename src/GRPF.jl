@@ -15,11 +15,10 @@ Some variable conversions from the original GRPF papers to this code:
 |-------|------|
 |   𝓔   |   E  |
 |   𝐶   |   C  |
-|   ϕ   |  phi | <= `phis`, because it's a vector of phi
+|   ϕ   |  phi |
 ==#
 
 using LinearAlgebra
-using StaticArrays
 using VoronoiDelaunay
 
 # TODO: allow these to be set by user
@@ -56,7 +55,8 @@ end
 
 # These files need the above structs defined
 include("VoronoiDelaunayExtensions.jl")
-include("GeneralFunctions.jl")
+include("utils.jl")
+include("coordinate_domains.jl")
 
 export rectangulardomain, diskdomain, grpf, PlotData
 

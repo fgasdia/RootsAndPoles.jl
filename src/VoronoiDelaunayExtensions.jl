@@ -26,15 +26,15 @@ function delaunayedges_fast(t::DelaunayTessellation2D{T}) where T <: AbstractPoi
         isexternal(tr) && continue
 
         ix_na = tr._neighbour_a
-        if (ix_na > ix) || isexternal(t._trigs[ix_na])
+        if (ix_na > ix) | isexternal(t._trigs[ix_na])
             push!(result, DelaunayEdge(getb(tr), getc(tr)))
         end
         ix_nb = tr._neighbour_b
-        if (ix_nb > ix) || isexternal(t._trigs[ix_nb])
+        if (ix_nb > ix) | isexternal(t._trigs[ix_nb])
             push!(result, DelaunayEdge(geta(tr), getc(tr)))
         end
         ix_nc = tr._neighbour_c
-        if (ix_nc > ix) || isexternal(t._trigs[ix_nc])
+        if (ix_nc > ix) | isexternal(t._trigs[ix_nc])
             push!(result, DelaunayEdge(geta(tr), getb(tr)))
         end
     end
