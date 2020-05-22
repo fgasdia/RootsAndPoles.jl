@@ -185,10 +185,7 @@ function counttriangleswithnodes(
     edges::Vector{DelaunayEdge{IndexablePoint2D}}
     )
 
-    # Select unique nodes of `edges`
-    # edgenodes = Vector{IndexablePoint2D}()
-    # uniquenodes!(edgenodes, edges)
-    # edgenodes = uniquenodes(edges)
+    # Get unique indices of nodes in `edges`
     idxs = uniqueindices(edges)
 
     # Build vector for counting number of edge nodes in each triangle
@@ -213,37 +210,18 @@ function counttriangleswithnodes(
                 trianglecounts[triidx] += 1
             end
         end
-
-        # for nodeidx in eachindex(edgenodes)
-        #     @inbounds nodecount = edgenodes[nodeidx]
-        #     @inbounds en = edges[nodeidx]
-        #     if nodecount == 3
-        #         ena = geta(en)
-        #         enb = getb(en)
-        #         if (ea == ena) | (eb == ena) | (ec == ena)
-        #             trianglecounts[triidx] += 1
-        #         end
-        #         if (ea == enb) | (eb == enb) | (ec == enb)
-        #             trianglecounts[triidx] += 1
-        #         end
-        #     elseif nodecount == 2
-        #         enb = getb(en)
-        #         if (ea == enb) | (eb == enb) | (ec == enb)
-        #             trianglecounts[triidx] += 1
-        #         end
-        #     elseif nodecount == 1
-        #         ena = geta(en)
-        #         if (ea == ena) | (eb == ena) | (ec == ena)
-        #             trianglecounts[triidx] += 1
-        #         end
-        #     end
-        # end
     end
     return trianglecounts
 end
 
-function uniqueindices(edges::Vector{DelaunayEdge{IndexablePoint2D}})
+"""
+    uniqueindices(edges)
+
+Return unique indices of all nodes in `edges`.
+"""
+@inline function uniqueindices(edges::Vector{DelaunayEdge{IndexablePoint2D}})
     idxs = Int[]
+    sizehint!(idxs, 2*length(edges))
     for i in eachindex(edges)
         @inbounds ei = edges[i]
         push!(idxs, getindex(geta(ei)))
@@ -252,32 +230,6 @@ function uniqueindices(edges::Vector{DelaunayEdge{IndexablePoint2D}})
     sort!(idxs)  # calling `sort!` first makes `unique!` more efficient
     unique!(idxs)
     return idxs
-end
-
-@inline function uniquenodes(edges::Vector{DelaunayEdge{IndexablePoint2D}})
-    edgenodes = zeros(Int8, length(edges))
-
-    for j in eachindex(edges)
-        e = @inbounds edges[j]
-        nodea, nodeb = geta(e), getb(e)
-
-        matcha = false
-        matchb = false
-        for i = 1:j
-            ei = @inbounds edges[i]
-            ea = geta(ei)
-            eb = getb(ei)
-            if ((nodea == ea) | (nodea == eb)) & ~matcha
-                matcha = true
-                edgenodes[i] |= 1
-            end
-            if ((nodeb == eb) | (nodeb == ea)) & ~matchb
-                matchb = true
-                edgenodes[i] |= 2
-            end
-        end
-    end
-    return edgenodes
 end
 
 """
@@ -297,18 +249,20 @@ function zone1newnodes!(
     n1b = getb(triangle1)
     push!(newnodes, (n1a+n1b)/2)
 
-    @inbounds for ii = 1:length(triangles)-1
-        na = geta(triangles[ii])
-        nb = getb(triangles[ii])
-        nc = getc(triangles[ii])
+    for ii = 1:length(triangles)-1
+        @inbounds tii = triangles[ii]
+        na = geta(tii)
+        nb = getb(tii)
+        nc = getc(tii)
 
         addnewnode!(newnodes, nb, nc, g2f, tolerance)
         addnewnode!(newnodes, nc, na, g2f, tolerance)
         addnewnode!(newnodes, geta(triangles[ii+1]), getb(triangles[ii+1]), g2f, tolerance)
     end
-    na = geta(triangles[end])
-    nb = getb(triangles[end])
-    nc = getc(triangles[end])
+    @inbounds te = triangles[end]
+    na = geta(te)
+    nb = getb(te)
+    nc = getc(te)
     addnewnode!(newnodes, nb, nc, g2f, tolerance)
     addnewnode!(newnodes, nc, na, g2f, tolerance)
 
@@ -345,7 +299,7 @@ Add nodes to `newnodes` in zone 2 (skinny triangles).
     triangles::Vector{DelaunayTriangle{IndexablePoint2D}}
     )
 
-    @inbounds for triangle in triangles
+    for triangle in triangles
         na = geta(triangle)
         nb = getb(triangle)
         nc = getc(triangle)
@@ -371,6 +325,9 @@ function contouredges(
     tess::DelaunayTessellation2D{IndexablePoint2D},
     edges::Vector{DelaunayEdge{IndexablePoint2D}}
     )
+
+    # TODO: do we need to form a tmpedges?
+    # can we just save an index rather than the whole edge?
 
     # Edges of triangles that contain at least 1 of `edges`
     tmpedges = Vector{DelaunayEdge{IndexablePoint2D}}()
@@ -429,6 +386,7 @@ function splittriangles(
     trianglecounts::Vector{<:Integer}
     )
 
+    # TODO: Can we just pass around indices rather than triangles?
     zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
     zone2triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
     ii = 0
@@ -455,12 +413,11 @@ the reference) is picked from the fixed set of nodes.
     tempnodes::Vector{IndexablePoint2D},
     g2f::Geometry2Function
     )
-    # NOTE: This function correponds to `FindNextNode.m`
 
     P = g2f(prevnode)
     S = g2f(refnode)
 
-    minphi = 2π + 1  # max diff of angles is 2π
+    minphi = 2π + 1  # max diff of angles is 2π, so this is guaranteed larger
     minphi_idx = 1
 
     for i in eachindex(tempnodes)
