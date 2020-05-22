@@ -224,7 +224,6 @@ Return unique indices of all nodes in `edges`.
 """
 @inline function uniqueindices(edges::Vector{DelaunayEdge{IndexablePoint2D}})
     idxs = Int[]
-    sizehint!(idxs, 2*length(edges))
     for i in eachindex(edges)
         @inbounds ei = edges[i]
         push!(idxs, getindex(geta(ei)))
@@ -247,16 +246,16 @@ function zone1newnodes!(
     tolerance
     )
 
-    triangle1 = triangles[1]
+    @inbounds triangle1 = triangles[1]
     n1a = geta(triangle1)
     n1b = getb(triangle1)
     push!(newnodes, (n1a+n1b)/2)
 
     for ii = 1:length(triangles)-1
-        @inbounds tii = triangles[ii]
-        na = geta(tii)
-        nb = getb(tii)
-        nc = getc(tii)
+        @inbounds triangle = triangles[ii]
+        na = geta(triangle)
+        nb = getb(triangle)
+        nc = getc(triangle)
 
         addnewnode!(newnodes, nb, nc, g2f, tolerance)
         addnewnode!(newnodes, nc, na, g2f, tolerance)
@@ -293,29 +292,28 @@ end
 end
 
 """
-    zone2newnodes!(newnodes, triangles)
+    zone2newnodes!(newnodes, triangle)
 
-Add nodes to `newnodes` in zone 2 (skinny triangles).
+Add node to `newnodes` for zone 2 ("skinny") triangles.
 """
-@inline function zone2newnodes!(
+@inline function zone2newnode!(
     newnodes::Vector{IndexablePoint2D},
-    triangles::Vector{DelaunayTriangle{IndexablePoint2D}}
+    triangle::DelaunayTriangle{IndexablePoint2D}
     )
 
-    for triangle in triangles
-        na = geta(triangle)
-        nb = getb(triangle)
-        nc = getc(triangle)
+    na = geta(triangle)
+    nb = getb(triangle)
+    nc = getc(triangle)
 
-        # For skinny triangle check, `geom2fcn` not needed because units cancel out
-        l1 = distance(na, nb)
-        l2 = distance(nb, nc)
-        l3 = distance(nc, na)
-        if max(l1,l2,l3)/min(l1,l2,l3) > SKINNYTRIANGLE
-            avgnode = (na+nb+nc)/3
-            push!(newnodes, avgnode)
-        end
+    # For skinny triangle check, `geom2fcn` not needed because units cancel out
+    l1 = distance(na, nb)
+    l2 = distance(nb, nc)
+    l3 = distance(nc, na)
+    if max(l1,l2,l3)/min(l1,l2,l3) > SKINNYTRIANGLE
+        avgnode = (na+nb+nc)/3
+        push!(newnodes, avgnode)
     end
+
     return nothing
 end
 
@@ -347,35 +345,38 @@ function contouredges(
         end
     end
 
-    # Remove duplicate edges
+    # Remove duplicate edges. This uses custom `==` for `IndexablePoint2D`
     unique!(C)
 
     return C
 end
 
 """
-    splittriangles(tess, trianglecounts)
+    splittriangles!(newnodes, tess, trianglecounts)
 
-Separate triangles in `tess` by zones.
+Add zone 2 triangles to `newnodes` and then return a vector of zone 1 triangles,
+which require special handling.
 """
-function splittriangles(
+function splittriangles!(
+    newnodes::AbstractVector,
     tess::DelaunayTessellation2D{IndexablePoint2D},
     trianglecounts::Vector{<:Integer}
     )
 
-    # TODO: Can we just pass around indices rather than triangles?
     zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
-    zone2triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
+
     ii = 0
-    @inbounds for triangle in tess
+    for triangle in tess
         ii += 1
-        if trianglecounts[ii] > 1
+        @inbounds tricount = trianglecounts[ii]
+
+        if tricount > 1
             push!(zone1triangles, triangle)
-        elseif trianglecounts[ii] == 1
-            push!(zone2triangles, triangle)
+        elseif tricount == 1
+            zone2newnode!(newnodes, triangle)
         end
     end
-    return zone1triangles, zone2triangles
+    return zone1triangles
 end
 
 """
@@ -567,14 +568,12 @@ function tesselate!(
 
         # How many times does each triangle contain a `selectE` node?
         trianglecounts = counttriangleswithnodes(tess, selectE)
-        zone1triangles, zone2triangles = splittriangles(tess, trianglecounts)
+
+        newnodes = Vector{IndexablePoint2D}()
+        zone1triangles = splittriangles!(newnodes, tess, trianglecounts)
 
         # Add new nodes in zone 1
-        newnodes = Vector{IndexablePoint2D}()
         zone1newnodes!(newnodes, zone1triangles, g2f, tolerance)
-
-        # Add new nodes in zone 2
-        zone2newnodes!(newnodes, zone2triangles)
 
         # Have to assign indexes to new nodes (which are all currently -1)
         setindex!.(newnodes, (1:length(newnodes)).+numnodes)
@@ -625,14 +624,10 @@ function tesselate!(
 
         # How many times does each triangle contain a `selectE` node?
         trianglecounts = counttriangleswithnodes(tess, selectE)
-        zone1triangles, zone2triangles = splittriangles(tess, trianglecounts)
 
-        # Add new nodes in zone 1
         newnodes = Vector{IndexablePoint2D}()
+        zone1triangles = splittriangles!(newnodes, tess, trianglecounts)
         zone1newnodes!(newnodes, zone1triangles, g2f, tolerance)
-
-        # Add new nodes in zone 2
-        zone2newnodes!(newnodes, zone2triangles)
 
         # Have to assign indexes to new nodes (which are all currently -1)
         setindex!.(newnodes, (1:length(newnodes)).+numnodes)
