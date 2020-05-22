@@ -9,7 +9,7 @@ Kowalczyk.
 module GRPF
 
 #==
-Some variable conversions from the original GRPF papers to this code:
+NOTE: Some variable conversions from the original GRPF papers to this code:
 
 | Paper | Code |
 |-------|------|
@@ -65,7 +65,7 @@ export rectangulardomain, diskdomain, grpf, PlotData
 
 Convert complex function value `val` to quadrant number.
 """
-@inline function quadrant(val::Complex)::Int8
+@inline function quadrant(val)::Int8
     # NOTE: This function correponds to `vinq.m`
 
     rv, iv = reim(val)
@@ -88,11 +88,14 @@ Evaluate `fcn` for [`quadrant`](@ref) at `nodes` and fill `quadrants`.
 
 `quadrants` is a Vector{} where each index corresponds to `node` index.
 """
-@inline function assignquadrants!(quadrants::Vector{<:Integer},
-                          nodes::Vector{IndexablePoint2D}, f::ScaledFunction{T}) where T
-    @inbounds for ii in eachindex(nodes)
-        val = f(nodes[ii])
-        quadrants[getindex(nodes[ii])] = quadrant(complex(val))
+@inline function assignquadrants!(
+    quadrants::Vector{<:Integer},
+    nodes::Vector{IndexablePoint2D},
+    f::ScaledFunction{T}) where T
+
+    for ii in eachindex(nodes)
+        p = @inbounds nodes[ii]
+        quadrants[getindex(p)] = quadrant(f(p))
     end
     return nothing
 end
@@ -138,6 +141,11 @@ function candidateedges(
     return E
 end
 
+"""
+    candidateedges(tess, quadrants, ::PlotData)
+
+Return candidate edges ``𝓔`` and the `phasediffs` across each edge.
+"""
 function candidateedges(
     tess::DelaunayTessellation2D{IndexablePoint2D},
     quadrants::Vector{<:Integer},
@@ -177,9 +185,11 @@ function counttriangleswithnodes(
     edges::Vector{DelaunayEdge{IndexablePoint2D}}
     )
 
-    # Nodes of select edges
-    edgenodes = Vector{IndexablePoint2D}()
-    uniquenodes!(edgenodes, edges)
+    # Select unique nodes of `edges`
+    # edgenodes = Vector{IndexablePoint2D}()
+    # uniquenodes!(edgenodes, edges)
+    # edgenodes = uniquenodes(edges)
+    idxs = uniqueindices(edges)
 
     # Build vector for counting number of edge nodes in each triangle
     n = 0
@@ -193,32 +203,81 @@ function counttriangleswithnodes(
     triidx = 0
     for triangle in tess
         triidx += 1
-        # `triangle` is in general not equal to `tess._trigs[triidx]`
+        # WARNING: `triangle` is in general not equal to `tess._trigs[triidx]`
         ea = geta(triangle)
         eb = getb(triangle)
         ec = getc(triangle)
-        @inbounds for nodeidx in eachindex(edgenodes)
-            if (ea == edgenodes[nodeidx]) | (eb == edgenodes[nodeidx]) | (ec == edgenodes[nodeidx])
+
+        for i in idxs
+            if (getindex(ea) == i) | (getindex(eb) == i) | (getindex(ec) == i)
                 trianglecounts[triidx] += 1
             end
         end
+
+        # for nodeidx in eachindex(edgenodes)
+        #     @inbounds nodecount = edgenodes[nodeidx]
+        #     @inbounds en = edges[nodeidx]
+        #     if nodecount == 3
+        #         ena = geta(en)
+        #         enb = getb(en)
+        #         if (ea == ena) | (eb == ena) | (ec == ena)
+        #             trianglecounts[triidx] += 1
+        #         end
+        #         if (ea == enb) | (eb == enb) | (ec == enb)
+        #             trianglecounts[triidx] += 1
+        #         end
+        #     elseif nodecount == 2
+        #         enb = getb(en)
+        #         if (ea == enb) | (eb == enb) | (ec == enb)
+        #             trianglecounts[triidx] += 1
+        #         end
+        #     elseif nodecount == 1
+        #         ena = geta(en)
+        #         if (ea == ena) | (eb == ena) | (ec == ena)
+        #             trianglecounts[triidx] += 1
+        #         end
+        #     end
+        # end
     end
     return trianglecounts
 end
 
-function uniquenodes!(
-    edgenodes::Vector{IndexablePoint2D},
-    edges::Vector{DelaunayEdge{IndexablePoint2D}}
-    )
-
-    @inbounds for ii in eachindex(edges)
-        nodea = geta(edges[ii])
-        nodeb = getb(edges[ii])
-
-        nodea in edgenodes || push!(edgenodes, nodea)
-        nodeb in edgenodes || push!(edgenodes, nodeb)
+function uniqueindices(edges::Vector{DelaunayEdge{IndexablePoint2D}})
+    idxs = Int[]
+    for i in eachindex(edges)
+        @inbounds ei = edges[i]
+        push!(idxs, getindex(geta(ei)))
+        push!(idxs, getindex(getb(ei)))
     end
-    return nothing
+    sort!(idxs)  # calling `sort!` first makes `unique!` more efficient
+    unique!(idxs)
+    return idxs
+end
+
+@inline function uniquenodes(edges::Vector{DelaunayEdge{IndexablePoint2D}})
+    edgenodes = zeros(Int8, length(edges))
+
+    for j in eachindex(edges)
+        e = @inbounds edges[j]
+        nodea, nodeb = geta(e), getb(e)
+
+        matcha = false
+        matchb = false
+        for i = 1:j
+            ei = @inbounds edges[i]
+            ea = geta(ei)
+            eb = getb(ei)
+            if ((nodea == ea) | (nodea == eb)) & ~matcha
+                matcha = true
+                edgenodes[i] |= 1
+            end
+            if ((nodeb == eb) | (nodeb == ea)) & ~matchb
+                matchb = true
+                edgenodes[i] |= 2
+            end
+        end
+    end
+    return edgenodes
 end
 
 """
