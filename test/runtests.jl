@@ -4,6 +4,7 @@ using SpecialFunctions
 using VoronoiDelaunay
 
 using GRPF
+import GRPF: IndexablePoint2D
 
 function approxmatch(A::AbstractArray, B::AbstractArray)
     length(A) == length(B) || return false

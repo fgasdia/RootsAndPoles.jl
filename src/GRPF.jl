@@ -18,8 +18,10 @@ NOTE: Some variable conversions from the original GRPF papers to this code:
 |   ϕ   |  phi |
 ==#
 
+import Base
 using LinearAlgebra
 using VoronoiDelaunay
+import VoronoiDelaunay: getx, gety, DelaunayEdge, DelaunayTriangle
 
 # TODO: allow these to be set by user
 const MAXITERATIONS = 100
@@ -59,6 +61,7 @@ include("utils.jl")
 include("coordinate_domains.jl")
 
 export rectangulardomain, diskdomain, grpf, PlotData
+
 
 """
     quadrant(val)
@@ -326,52 +329,26 @@ function contouredges(
     edges::Vector{DelaunayEdge{IndexablePoint2D}}
     )
 
-    # TODO: do we need to form a tmpedges?
-    # can we just save an index rather than the whole edge?
+    C = Vector{DelaunayEdge{IndexablePoint2D}}()
 
     # Edges of triangles that contain at least 1 of `edges`
-    tmpedges = Vector{DelaunayEdge{IndexablePoint2D}}()
     for triangle in tess
-        # We don't know which "direction" the edges are defined in the triangle,
-        # so we need to test both
         pa, pb, pc = geta(triangle), getb(triangle), getc(triangle)
 
         edgea = DelaunayEdge(pa, pb)
-        edgearev = DelaunayEdge(pb, pa)
         edgeb = DelaunayEdge(pb, pc)
-        edgebrev = DelaunayEdge(pc, pb)
         edgec = DelaunayEdge(pc, pa)
-        edgecrev = DelaunayEdge(pa, pc)
 
-        # Does triangle contain edge?
         for edge in edges
-            if (edgea == edge) | (edgeb == edge) | (edgec == edge) |
-                (edgearev == edge) | (edgebrev == edge) | (edgecrev == edge)
-                push!(tmpedges, edgea, edgeb, edgec)
+            if (edgea == edge) | (edgeb == edge) | (edgec == edge)
+                push!(C, edgea, edgeb, edgec)
                 break  # only count each triangle once
             end
         end
     end
 
-    # Remove duplicate (reverse) edges from `tmpedges` and otherwise append to `C`
-    C = Vector{DelaunayEdge{IndexablePoint2D}}()
-    duplicateedges = zeros(Int8, length(tmpedges))
-    @inbounds for (idxa, edgea) in enumerate(tmpedges)
-        if duplicateedges[idxa] == 0
-            for (idxb, edgeb) in enumerate(tmpedges)
-                # Check if Edge(a,b) == Edge(b, a), i.e. if there are duplicate edges
-                if edgea == DelaunayEdge(getb(edgeb), geta(edgeb))
-                    duplicateedges[idxa] = 2
-                    duplicateedges[idxb] = 2
-                    break
-                end
-            end
-            if duplicateedges[idxa] != 2
-                duplicateedges[idxa] = 1
-                push!(C, edgea)
-            end
-        end
-    end
+    # Remove duplicate edges
+    unique!(C)
 
     return C
 end
