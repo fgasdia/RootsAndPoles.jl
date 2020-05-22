@@ -114,7 +114,7 @@ Evaluate `fcn` for [`quadrant`](@ref) at `nodes` and fill `quadrants`.
 end
 
 """
-    candidateedges(tess, quadrants)
+    candidateedges!(tess, quadrants)
 
 Return candidate edges ``𝓔`` that contain a phase change of 2 quadrants.
 
@@ -127,14 +127,13 @@ Note:
 
   - Order of ``𝓔`` is not guaranteed.
 """
-function candidateedges(
+function candidateedges!(
+    E::Vector{DelaunayEdge{IndexablePoint2D}},
     tess::DelaunayTessellation2D{IndexablePoint2D},
     quadrants::Vector{<:Integer}
     )
 
-    E = Vector{DelaunayEdge{IndexablePoint2D}}()
-
-    # Improved performance of `delaunayedges()`
+    # Better performance compared to `delaunayedges()`
     # see: https://github.com/JuliaGeometry/VoronoiDelaunay.jl/issues/47
     @inbounds for ix in 2:tess._last_trig_index
         tr = tess._trigs[ix]
@@ -171,23 +170,21 @@ function candidateedges(
         end
     end
 
-    unique!(E)
-
-    return E
+    return nothing
 end
 
 """
-    candidateedges(tess, quadrants, ::PlotData)
+    candidateedges!(tess, quadrants, ::PlotData)
 
 Return candidate edges ``𝓔`` and the `phasediffs` across each edge.
 """
-function candidateedges(
+function candidateedges!(
+    E::Vector{DelaunayEdge{IndexablePoint2D}},
     tess::DelaunayTessellation2D{IndexablePoint2D},
     quadrants::Vector{<:Integer},
     ::PlotData
     )
 
-    E = Vector{DelaunayEdge{IndexablePoint2D}}()
     phasediffs = Vector{Int8}()
 
     for edge in delaunayedges_fast(tess)
@@ -207,6 +204,7 @@ function candidateedges(
 
         push!(phasediffs, ΔQ)
     end
+
     return E, phasediffs
 end
 
@@ -230,13 +228,17 @@ function counttriangleswithnodes(
     for triangle in tess
         triidx += 1
         # WARNING: `triangle` is in general not equal to `tess._trigs[triidx]`
-        ea = geta(triangle)
-        eb = getb(triangle)
-        ec = getc(triangle)
+        na = geta(triangle)
+        nb = getb(triangle)
+        nc = getc(triangle)
+
+        nai = getindex(na)
+        nbi = getindex(nb)
+        nci = getindex(nc)
 
         tricount = 0
         for idx in idxs
-            if (getindex(ea) == idx) | (getindex(eb) == idx) | (getindex(ec) == idx)
+            if (nai == idx) | (nbi == idx) | (nci == idx)
                 tricount += 1
             end
         end
@@ -274,7 +276,7 @@ function zone1newnodes!(
     tolerance
     )
 
-    @inbounds triangle1 = triangles[1]
+    triangle1 = triangles[1]
     n1a = geta(triangle1)
     n1b = getb(triangle1)
     push!(newnodes, (n1a+n1b)/2)
@@ -289,7 +291,7 @@ function zone1newnodes!(
         addnewnode!(newnodes, nc, na, g2f, tolerance)
         addnewnode!(newnodes, geta(triangles[ii+1]), getb(triangles[ii+1]), g2f, tolerance)
     end
-    @inbounds te = triangles[end]
+    te = triangles[end]
     na = geta(te)
     nb = getb(te)
     nc = getc(te)
@@ -450,8 +452,6 @@ function evaluateregions!(
     C::Vector{DelaunayEdge{IndexablePoint2D}},
     g2f::Geometry2Function
     )
-    # TODO: do this without the `popfirst!`s and `deleteat!`s?
-    # low priority because this function has negligible time
 
     # NOTE: The nodes of each region are in reverse order compared to Matlab
     # with respect to their quadrants
@@ -569,7 +569,6 @@ function tesselate!(
 
     g2f = f.g2f
 
-    # TODO: What happens with this E?
     E = Vector{DelaunayEdge{IndexablePoint2D}}()
     quadrants = Vector{Int8}()
 
@@ -587,13 +586,15 @@ function tesselate!(
         numnodes += numnewnodes
 
         # Determine candidate edges that may be near a root or pole
-        E = candidateedges(tess, quadrants)
+        empty!(E)  # we always start with a blank E
+        candidateedges!(E, tess, quadrants)
         isempty(E) && error("No roots or poles found in the domain.")
 
         # Select candidate edges that are longer than the chosen tolerance
         selectE = filter(e -> longedge(e, tolerance, g2f), E)
         isempty(selectE) && return tess, E, quadrants
 
+        # return if maximum edge length has reached tolerance
         maxElength = maximum(distance(g2f(e)) for e in selectE)
         maxElength < tolerance && return tess, E, quadrants
 
@@ -644,14 +645,16 @@ function tesselate!(
         numnodes += numnewnodes
 
         # Determine candidate edges that may be near a root or pole
-        E, phasediffs = candidateedges(tess, quadrants, PlotData())
+        empty!(E)  # we always start with a blank E
+        E, phasediffs = candidateedges!(E, tess, quadrants, PlotData())
         isempty(E) && error("No roots found in the domain")
 
         # Select candidate edges that are longer than the chosen tolerance
         selectE = filter(e -> longedge(e, tolerance, g2f), E)
         isempty(selectE) && return tess, E, quadrants, phasediffs
 
-        maxElength = maximum(distance(g2f(e)) for e in selectE)  # BUG: Type not known?
+        # return if maximum edge length has reached tolerance
+        maxElength = maximum(distance(g2f(e)) for e in selectE)
         maxElength < tolerance && return tess, E, quadrants, phasediffs
 
         # How many times does each triangle contain a `selectE` node?
