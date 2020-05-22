@@ -223,16 +223,8 @@ function counttriangleswithnodes(
     # Get unique indices of nodes in `edges`
     idxs = uniqueindices(edges)
 
-    # TODO: just push into triangle counts instead?
-    # Build vector for counting number of edge nodes in each triangle
-    n = 0
-    for i in eachindex(tess._trigs)
-        @inbounds triangle = tess._trigs[i]
-        if !isexternal(triangle)
-            n += 1
-        end
-    end
-    trianglecounts = zeros(Int, n)
+    trianglecounts = Vector{Int}()
+    sizehint!(trianglecounts, tess._last_trig_index)  # not exactly this number
 
     triidx = 0
     for triangle in tess
@@ -242,11 +234,13 @@ function counttriangleswithnodes(
         eb = getb(triangle)
         ec = getc(triangle)
 
-        for i in idxs
-            if (getindex(ea) == i) | (getindex(eb) == i) | (getindex(ec) == i)
-                trianglecounts[triidx] += 1
+        tricount = 0
+        for idx in idxs
+            if (getindex(ea) == idx) | (getindex(eb) == idx) | (getindex(ec) == idx)
+                tricount += 1
             end
         end
+        push!(trianglecounts, tricount)
     end
     return trianglecounts
 end
