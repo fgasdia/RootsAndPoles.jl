@@ -4,8 +4,7 @@ __precompile__(true)
 # GRPF: Global complex Roots and Poles Finding algorithm
 
 A Julia implementation of the GRPF (https://github.com/PioKow/GRPF) by Piotr
-Kowalczyk. Matlab files ('.m') listed in _see also_ sections of function doc
-strings refer to Piotr's git repo.
+Kowalczyk.
 """
 module GRPF
 
@@ -65,10 +64,10 @@ export rectangulardomain, diskdomain, grpf, PlotData
     quadrant(val)
 
 Convert complex function value `val` to quadrant number.
-
-See also: `vinq.m`
 """
 @inline function quadrant(val::Complex)::Int8
+    # NOTE: This function correponds to `vinq.m`
+
     rv, iv = reim(val)
     if (rv > 0) & (iv >= 0)
         return 1
@@ -108,10 +107,9 @@ quadrants meet. Since any triangulation of the four nodes located in the four di
 quadrants requires at least one edge of ``|ΔQ| = 2``, then all such edges are potentially
 in the vicinity of a root or pole.
 
-Notes:
- - Order of ``𝓔`` is not guaranteed.
- - Count of phasediffs `ΔQ` of value 1 and 3 can differ from Matlab in normal operation,
- because it depends on "direction" of edge.
+Note:
+
+  - Order of ``𝓔`` is not guaranteed.
 """
 function candidateedges(
     tess::DelaunayTessellation2D{IndexablePoint2D},
@@ -125,6 +123,8 @@ function candidateedges(
         idxa, idxb = getindex(nodea), getindex(nodeb)
 
         # NOTE: To match Matlab, force `idxa` < `idxb`
+        # Count of phasediffs `ΔQ` of value 1 and 3 can differ from Matlab
+        # because it depends on "direction" of edge.
         # (order doesn't matter for `ΔQ == 2`, which is the only case we care about)
         # if idxa > idxb
         #     idxa, idxb = idxb, idxa
@@ -389,8 +389,6 @@ end
 
 Find the index of the next node in the candidate region boundary process. The next one (after
 the reference) is picked from the fixed set of nodes.
-
-See also: `FindNextNode.m`
 """
 @inline function findnextnode(
     prevnode::IndexablePoint2D,
@@ -398,6 +396,7 @@ See also: `FindNextNode.m`
     tempnodes::Vector{IndexablePoint2D},
     g2f::Geometry2Function
     )
+    # NOTE: This function correponds to `FindNextNode.m`
 
     P = g2f(prevnode)
     S = g2f(refnode)
@@ -424,14 +423,15 @@ end
 
 """
     evaluateregions!(C, g2f)
-
-# Note: The nodes of each region are in reverse order compared to Matlab wrt their quadrants?
 """
 function evaluateregions!(
     C::Vector{DelaunayEdge{IndexablePoint2D}},
     g2f::Geometry2Function
     )
     # TODO: do this without the `popfirst!`s and `deleteat!`s
+
+    # NOTE: The nodes of each region are in reverse order compared to Matlab
+    # with respect to their quadrants
 
     # Initialize
     numregions = 1
@@ -609,15 +609,11 @@ function tesselate!(
     iteration = 0
     while (iteration < MAXITERATIONS) && (numnodes < MAXNODES)
         iteration += 1
-        # @info iteration
-        # @info "yep"
 
         # Determine which quadrant function value belongs at each node
         numnewnodes = length(newnodes)
         append!(quadrants, Vector{Int8}(undef, numnewnodes))
         assignquadrants!(quadrants, newnodes, f)
-
-        # @info "Quadrants assigned"
 
         # Add new nodes to `tess`
         push!(tess, newnodes)
