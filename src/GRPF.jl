@@ -565,7 +565,6 @@ function rootsandpoles(
     zroots = Vector{complexT}()
     zpoles = Vector{complexT}()
     for ii in eachindex(regions)
-        # XXX: Order of regions?
         quadrantsequence = [quadrants[getindex(node)] for node in regions[ii]]
 
         # Sign flip because `regions[ii]` are in opposite order of Matlab?
