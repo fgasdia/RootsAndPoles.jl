@@ -38,11 +38,10 @@ const MAXCOORD = nextfloat(max_coord, -10)
 const MINCOORD = nextfloat(min_coord, 10)
 
 """
-    TesselationParams
+    GRPFParams
 
 Structure for holding values used by `GRPF` to stop iterating or split Delaunay
 triangles.
-
 
 `maxiterations` is the maximum number of refinement iterations before `grpf`
 returns. By default, `maxiterations` is 100.
@@ -56,29 +55,34 @@ than `skinnytriangle` will be split during the `grpf` refinement iterations.
 `tess_sizehint` is used to provide a size hint to the total number of expected
 nodes in the Delaunay tesselation. Setting this number approximately correct
 will improve performance. By default, `tess_sizehint` is 5000.
+
+`tolerance` maximum allowed edge length of the tesselation defined in the
+`origcoords` domain. By default, `tolerance` is 1e-9.
 """
-struct TesselationParams
+struct GRPFParams{T<:Real}
     maxiterations::Int
     maxnodes::Int
     skinnytriangle::Int
     tess_sizehint::Int
+    tolerance::T
 end
-"""
-    TesselationParams(tess_sizehint::Integer)
 
-Convenience function for creating a `TesselationParams` object with the most
-important parameter, `tess_sizehint`.
 """
-TesselationParams(tess_sizehint::Integer) = TesselationParams(100, 500000, 3, tess_sizehint)
-TesselationParams() = TesselationParams(100, 500000, 3, 5000)
+    GRPFParams(tess_sizehint::Integer, tolerance::Real)
+
+Convenience function for creating a `GRPFParams` object with the most
+important parameters, `tess_sizehint` and `tolerance`.
+"""
+GRPFParams(tess_sizehint::Integer, tolerance::Real) = GRPFParams(100, 500000, 3, tess_sizehint, tolerance)
+GRPFParams() = GRPFParams(100, 500000, 3, 5000, 1e-9)
 
 struct PlotData end
 
 """
     Geometry2Function
 
-Store conversion coefficients from the `VoronoiDelaunay` domain to the original
-function domain.
+Store conversion coefficients from the `VoronoiDelaunay` domain to the `origcoords`
+domain.
 """
 struct Geometry2Function{T<:AbstractFloat}
     ra::T
@@ -92,8 +96,8 @@ end
 """
     ScaledFunction{T<:Function}
 
-Store conversion coefficients from the `VoronoiDelaunay` domain to the original
-function domain so that a `ScaledFunction` can be called in place of the original
+Store conversion coefficients from the `VoronoiDelaunay` domain to the
+`origcoords` domain so that a `ScaledFunction` can be called in place of the original
 function when providing an argument in the `VoronoiDelaunay` domain.
 """
 struct ScaledFunction{F<:Function,G<:Geometry2Function}
@@ -107,7 +111,7 @@ include("VoronoiDelaunayExtensions.jl")
 include("utils.jl")
 include("coordinate_domains.jl")
 
-export rectangulardomain, diskdomain, grpf, PlotData, TesselationParams
+export rectangulardomain, diskdomain, grpf, PlotData, GRPFParams
 
 """
     quadrant(val)
@@ -210,7 +214,7 @@ function candidateedges!(
 end
 
 """
-    candidateedges!(tess, quadrants, ::PlotData)
+    candidateedges!(E, tess, quadrants, ::PlotData)
 
 Return candidate edges ``𝓔`` and the `phasediffs` across each edge.
 """
@@ -422,7 +426,7 @@ function contouredges(
 end
 
 """
-    splittriangles!(newnodes, tess, trianglecounts, tess_params)
+    splittriangles!(newnodes, tess, trianglecounts, params)
 
 Add zone 2 triangles to `newnodes` and then return a vector of zone 1 triangles,
 which require special handling.
@@ -431,7 +435,7 @@ function splittriangles!(
     newnodes::AbstractVector,
     tess::DelaunayTessellation2D{IndexablePoint2D},
     trianglecounts::Vector{<:Integer},
-    tess_params::TesselationParams
+    params::GRPFParams
     )
 
     zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
@@ -444,7 +448,7 @@ function splittriangles!(
         if tricount > 1
             push!(zone1triangles, triangle)
         elseif tricount == 1
-            zone2newnode!(newnodes, triangle, tess_params.skinnytriangle)
+            zone2newnode!(newnodes, triangle, params.skinnytriangle)
         end
     end
     return zone1triangles
@@ -593,7 +597,7 @@ function rootsandpoles(
 end
 
 """
-    tesselate!(tess, newnodes, fcn, geom2fcn, tolerance)
+    tesselate!(tess, newnodes, fcn, params)
 
 Label quadrants, identify candidate edges, and iteratively split triangles.
 """
@@ -601,8 +605,7 @@ function tesselate!(
     tess::DelaunayTessellation2D{IndexablePoint2D},
     newnodes::Vector{IndexablePoint2D},
     f::ScaledFunction{F,G},
-    tolerance,
-    tess_params::TesselationParams
+    params::GRPFParams
     ) where {F,G}
 
     # Initialize
@@ -615,7 +618,7 @@ function tesselate!(
     quadrants = Vector{Int8}()
 
     iteration = 0
-    while (iteration < tess_params.maxiterations) && (numnodes < tess_params.maxnodes)
+    while (iteration < params.maxiterations) && (numnodes < params.maxnodes)
         iteration += 1
 
         # Determine which quadrant function value belongs at each node
@@ -633,21 +636,21 @@ function tesselate!(
         isempty(E) && error("No roots or poles found in the domain.")
 
         # Select candidate edges that are longer than the chosen tolerance
-        selectE = filter(e -> longedge(e, tolerance, g2f), E)
+        selectE = filter(e -> longedge(e, params.tolerance, g2f), E)
         isempty(selectE) && return tess, E, quadrants
 
         # return if maximum edge length has reached tolerance
         maxElength = maximum(distance(g2f(e)) for e in selectE)
-        maxElength < tolerance && return tess, E, quadrants
+        maxElength < params.tolerance && return tess, E, quadrants
 
         # How many times does each triangle contain a `selectE` node?
         trianglecounts = counttriangleswithnodes(tess, selectE)
 
         newnodes = Vector{IndexablePoint2D}()
-        zone1triangles = splittriangles!(newnodes, tess, trianglecounts, tess_params)
+        zone1triangles = splittriangles!(newnodes, tess, trianglecounts, params)
 
         # Add new nodes in zone 1
-        zone1newnodes!(newnodes, zone1triangles, g2f, tolerance)
+        zone1newnodes!(newnodes, zone1triangles, g2f, params.tolerance)
 
         # Have to assign indexes to new nodes (which are all currently -1)
         setindex!.(newnodes, (1:length(newnodes)).+numnodes)
@@ -660,8 +663,7 @@ function tesselate!(
     tess::DelaunayTessellation2D{IndexablePoint2D},
     newnodes::Vector{IndexablePoint2D},
     f::ScaledFunction{F,G},
-    tolerance,
-    tess_params::TesselationParams,
+    params::GRPFParams,
     ::PlotData
     ) where {F,G}
 
@@ -675,7 +677,7 @@ function tesselate!(
     quadrants = Vector{Int8}()
 
     iteration = 0
-    while (iteration < tess_params.maxiterations) && (numnodes < tess_params.maxnodes)
+    while (iteration < params.maxiterations) && (numnodes < params.maxnodes)
         iteration += 1
 
         # Determine which quadrant function value belongs at each node
@@ -693,19 +695,19 @@ function tesselate!(
         isempty(E) && error("No roots found in the domain")
 
         # Select candidate edges that are longer than the chosen tolerance
-        selectE = filter(e -> longedge(e, tolerance, g2f), E)
+        selectE = filter(e -> longedge(e, params.tolerance, g2f), E)
         isempty(selectE) && return tess, E, quadrants, phasediffs
 
         # return if maximum edge length has reached tolerance
         maxElength = maximum(distance(g2f(e)) for e in selectE)
-        maxElength < tolerance && return tess, E, quadrants, phasediffs
+        maxElength < params.tolerance && return tess, E, quadrants, phasediffs
 
         # How many times does each triangle contain a `selectE` node?
         trianglecounts = counttriangleswithnodes(tess, selectE)
 
         newnodes = Vector{IndexablePoint2D}()
-        zone1triangles = splittriangles!(newnodes, tess, trianglecounts, tess_params)
-        zone1newnodes!(newnodes, zone1triangles, g2f, tolerance)
+        zone1triangles = splittriangles!(newnodes, tess, trianglecounts, params)
+        zone1newnodes!(newnodes, zone1triangles, g2f, params.tolerance)
 
         # Have to assign indexes to new nodes (which are all currently -1)
         setindex!.(newnodes, (1:length(newnodes)).+numnodes)
@@ -715,13 +717,12 @@ function tesselate!(
 end
 
 """
-    grpf(fcn, origcoords, tolerance, tess_params=TesselationParams())
+    grpf(fcn, origcoords, params=GRPFParams())
 
 Return a vector `roots` and a vector of `poles` of a single (complex) argument
 function `fcn`.
 
-Searches within a domain specified by the vector of `origcoords` with a
-`tolerance` of the maximum Delaunay triangle edge length.
+Searches within a domain specified by the vector of `origcoords`.
 
 # Examples
 ```jldoctest
@@ -733,11 +734,9 @@ julia> yb, ye = -2, 2
 
 julia> r = 0.1
 
-julia> tolerance = 1e-9
-
 julia> origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 
-julia> roots, poles = grpf(simplefcn, origcoords, tolerance);
+julia> roots, poles = grpf(simplefcn, origcoords);
 
 julia> roots
 3-element Array{Complex{Float64},1}:
@@ -750,7 +749,7 @@ julia> roots
  -3.8045513406359555e-10 - 1.0000000002235174im
 ```
 """
-function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, tolerance, tess_params=TesselationParams())
+function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, params=GRPFParams())
 
     # TODO: See pull request #50 on VoronoiDelaunay.jl which handles the space
     # mapping automatically.
@@ -774,12 +773,12 @@ function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, tolerance, te
         maximum(real, origcoords) <= max_coord && maximum(imag, origcoords) <= max_coord "Scaled coordinates out of bounds"
 
     newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
-    tess = DelaunayTessellation2D{IndexablePoint2D}(tess_params.tess_sizehint)
+    tess = DelaunayTessellation2D{IndexablePoint2D}(params.tess_sizehint)
 
     g2f = Geometry2Function(ra, rb, ia, ib)
     f = ScaledFunction(fcn, g2f)
 
-    tess, E, quadrants = tesselate!(tess, newnodes, f, tolerance, tess_params)
+    tess, E, quadrants = tesselate!(tess, newnodes, f, params)
     C = contouredges(tess, E)
     regions = evaluateregions!(C, g2f)
     zroots, zpoles = rootsandpoles(regions, quadrants, g2f)
@@ -788,7 +787,7 @@ function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, tolerance, te
 end
 
 """
-    grpf(fcn, origcoords, tolerance, ::PlotData, tess_params=TesselationParams())
+    grpf(fcn, origcoords, ::PlotData, params=GRPFParams())
 
 Variant of `grpf` that returns `quadrants` and `phasediffs` in addition to
 `zroots` and `zpoles`, primarily for plotting or diagnostics.
@@ -803,11 +802,9 @@ julia> yb, ye = -2, 2
 
 julia> r = 0.1
 
-julia> tolerance = 1e-9
-
 julia> origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 
-julia> roots, poles, quadrants, phasediffs = grpf(simplefcn, origcoords, tolerance, PlotData());
+julia> roots, poles, quadrants, phasediffs = grpf(simplefcn, origcoords, PlotData());
 
 julia> roots
 3-element Array{Complex{Float64},1}:
@@ -820,7 +817,7 @@ julia> roots
  -3.8045513406359555e-10 - 1.0000000002235174im
 ```
 """
-function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, tolerance, ::PlotData, tess_params=TesselationParams())
+function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, ::PlotData, params=GRPFParams())
     # Need to map space domain for VoronoiDelaunay.jl
     rmin, rmax = minimum(real, origcoords), maximum(real, origcoords)
     imin, imax = minimum(imag, origcoords), maximum(imag, origcoords)
@@ -839,12 +836,12 @@ function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, tolerance, ::
         maximum(real, origcoords) <= max_coord && maximum(imag, origcoords) <= max_coord "Scaled coordinates out of bounds"
 
     newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
-    tess = DelaunayTessellation2D{IndexablePoint2D}(tess_params.tess_sizehint)
+    tess = DelaunayTessellation2D{IndexablePoint2D}(params.tess_sizehint)
 
     g2f = Geometry2Function(ra, rb, ia, ib)
     f = ScaledFunction(fcn, g2f)
 
-    tess, E, quadrants, phasediffs = tesselate!(tess, newnodes, f, tolerance, tess_params, PlotData())
+    tess, E, quadrants, phasediffs = tesselate!(tess, newnodes, f, params, PlotData())
     C = contouredges(tess, E)
     regions = evaluateregions!(C, g2f)
     zroots, zpoles = rootsandpoles(regions, quadrants, g2f)

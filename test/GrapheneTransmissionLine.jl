@@ -36,7 +36,6 @@ xe = 400  # real part end
 yb = -100  # imag part begin
 ye = 400  # imag part end
 r = 18  # initial mesh step
-tolerance = 1e-9
 
 origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 
@@ -53,7 +52,7 @@ matlab_zroots = [-38.1777253145628 - 32.5295210454247im,
 matlab_zpoles = [-2.30871731988513e-10 - 3.44963766202144im,
                  -2.65852297441317e-10 + 3.4496376622893im]
 
-zroots, zpoles = grpf(graphenefunction, origcoords, tolerance)
+zroots, zpoles = grpf(graphenefunction, origcoords)
 
 @test length(zroots) == 8
 @test length(zpoles) == 2
@@ -61,7 +60,7 @@ zroots, zpoles = grpf(graphenefunction, origcoords, tolerance)
 @test approxmatch(zroots, matlab_zroots)
 @test approxmatch(zpoles, matlab_zpoles)
 
-pzroots, pzpoles, quadrants, phasediffs, tess = grpf(graphenefunction, origcoords, tolerance, PlotData())
+pzroots, pzpoles, quadrants, phasediffs, tess = grpf(graphenefunction, origcoords, PlotData())
 
 @test approxmatch(pzroots, matlab_zroots)
 @test approxmatch(pzpoles, matlab_zpoles)
@@ -76,10 +75,10 @@ tolerance = 1e-9
 
 origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 
-bzroots, bzpoles = grpf(graphenefunction, origcoords, tolerance)
+bzroots, bzpoles = grpf(graphenefunction, origcoords)
 
 @test all(isa.(bzroots, Complex{BigFloat}))
-@test all(isa.(bzpoles, Complex{BigFloat})) 
+@test all(isa.(bzpoles, Complex{BigFloat}))
 
 @test approxmatch(bzroots, zroots)
 @test approxmatch(bzpoles, zpoles)

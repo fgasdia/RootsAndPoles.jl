@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.com/fgasdia/GRPF.jl.svg?branch=master)](https://travis-ci.com/fgasdia/GRPF.jl) [![Build status](https://ci.appveyor.com/api/projects/status/megpgn8l1ej5m3ww?svg=true)](https://ci.appveyor.com/project/fgasdia/grpf-jl) [![DOI](https://zenodo.org/badge/154031378.svg)](https://zenodo.org/badge/latestdoi/154031378)
 
-A Julia implementation of [GRPF](https://github.com/PioKow/GRPF) by Dr. Piotr Kowalczyk.
+A Julia implementation of [GRPF](https://github.com/PioKow/GRPF) by Piotr Kowalczyk.
 
 ## Description
 
@@ -26,48 +26,18 @@ Consider a simple transmission line consisting of a thin graphene layer on a sil
 
 First, define the single (complex) argument function for which we seek roots and poles. The normalized propagation coefficient `z` for TM modes at frequency `f` can be found from the equation `graphenefunction(z)`.
 ```julia
-function graphenefunction(z)
-    f = 1e12
-    c = 299792458
-    μ₀ = 4π*1e-7
-    ϵ₀ = 1/(μ₀*c^2)
-
-    e = 1.602176565e-19
-    kB = 1.3806488e-23
-    hk = 1.05457168e-34
-    vFe = 1e6
-    μc = 0.05*e
-    τ = 0.135e-12
-    T = 300
-    ϵᵣ₁ = 1.0
-    ϵᵣ₂ = 11.9
-
-    ω = 2π*f
-    k₀ = ω/c
-    kᵣ₀ = -im*z*k₀
-
-    Slo=-im*e^2*kB*T*log(2+2*cosh(μc/kB/T)) / (π*hk^2*(ω-im/τ))
-
-    a = -3*vFe^2*Slo/(4*(ω-im/τ)^2)
-    b = a/3
-
-    Y1TM = ω*ϵᵣ₁*ϵ₀/sqrt(ϵᵣ₁*k₀^2 - kᵣ₀^2);
-    Y2TM = ω*ϵᵣ₂*ϵ₀/sqrt(ϵᵣ₂*k₀^2 - kᵣ₀^2);
-    YSTM = Slo + 1*a*kᵣ₀^2 + 1*b*kᵣ₀^2;
-
-    w = (Y1TM + Y2TM + YSTM)*(-Y1TM + Y2TM + YSTM)*(Y1TM - Y2TM + YSTM)*(-Y1TM - Y2TM + YSTM) # four Riemann sheets
-
-    return w
+function simplefcn(z)
+      w = (z - 1)*(z - im)^2*(z + 1)^3/(z + im)
 end
 ```
 
 Next, define parameters for the initial grid.
 ```julia
-xb = -100  # real part begin
-xe = 400  # real part end
-yb = -100  # imag part begin
-ye = 400  # imag part end
-r = 18  # initial mesh step
+xb = -2  # real part begin
+xe = 2  # real part end
+yb = -2  # imag part begin
+ye = 2  # imag part end
+r = 0.1  # initial mesh step
 tolerance = 1e-9
 ```
 
@@ -78,27 +48,52 @@ using GRPF
 origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 ```
 
-Roots and poles can be obtained with the `grpf` function. We only need to pass the handle to our `graphenefunction`, the `origcoords`, and a `tolerance` at which we stop mesh refinement. Specifically, `tolerance` is the smallest triangle edge length of the candidate edges.
+Roots and poles can be obtained with the `grpf` function. We only need to pass the handle to our `simplefcn` and the `origcoords`.
 ```julia
-zroots, zpoles = grpf(graphenefunction, origcoords, tolerance)
+zroots, zpoles = grpf(simplefcn, origcoords)
 ```
+
+### Additional parameters
+
+Additional parameters can be provided to the tesselation and GRPF algorithms by explicitly passing a `GRPFParams` struct. The two most useful parameters are `tess_sizehint` for the final total number of nodes in the internal `DelaunayTessellation2D` object and the root finder `tolerance` at which the mesh refinement stops. Specifically, `tolerance` is the smallest triangle edge length of the candidate edges (defined in the `origcoords` domain).
+
+By default, the value of `tess_sizehint` is 5000 and the `tolerance` is 1e-9, but they can be specified by providing the `GRPFParams` argument
+```julia
+zroots, zpoles = grpf(simplefcn, origcoords, tolerance, GRPFParams(8000, 1e-12))
+```
+
+Additional parameters which can be controlled are `maxiterations`, `maxnodes`, and `skinnytriangle`. `maxiterations` sets the maximum number of mesh refinement iterations and `maxnodes` sets the maximum number of nodes allowed in the `DelaunayTessellation2D` before returning. `skinnytriangle` is the maximum allowed ratio of the longest to shortest side length in a tesselation triangle before the triangle is automatically subdivided in the mesh refinement step. Default values are
+
+  - `maxiterations`: 100
+  - `maxnodes`: 500000
+  - `skinnytriangle`: 3
+
+These can be specified along with the `tess_sizehint` and `tolerance` as, e.g.
+```julia
+zroots, zpoles = grpf(simplefcn, origcoords, tolerance, GRPFParams(200, 10000, 3, 8000, 1e-12))
+```
+
+### Plot data
 
 If mesh node `quadrants` and `phasediffs` are wanted for plotting, simply pass a `PlotData()` instance.
 ```julia
 zroots, zpoles, quadrants, phasediffs = grpf(graphenefunction, origcoords, tolerance, PlotData())
 ```
 
+### Additional examples
+
 See [test/](test/) for additional examples.
 
-### Limitations
+## Limitations
 
-Note about VoronoiDelaunay dependence using Float64.
+This package uses [VoronoiDelaunay.jl](https://github.com/JuliaGeometry/VoronoiDelaunay.jl) to perform the Delaunay tesselation. `VoronoiDelaunay` is numerically limited to the range of `1.0+eps(Float64)` to `2.0-2eps(Float64)` for its point coordinates. `GRPF.jl` will accept functions and `origcoords` that aren't limited to `Complex{Float64}`, for example `Complex{BigFloat}`, but the internal tolerance of the root finding is limited to `Float64` precision.
 
 ## Citing
 
 Please consider citing Piotr's publications if this code is used in scientific work:
 
   1. P. Kowalczyk, “Complex Root Finding Algorithm Based on Delaunay Triangulation”, ACM Transactions on Mathematical Software, vol. 41, no. 3, art. 19, pp. 1-13, June 2015. https://dl.acm.org/citation.cfm?id=2699457
+
   2. P. Kowalczyk, "Global Complex Roots and Poles Finding Algorithm Based on Phase Analysis for Propagation and Radiation Problems," IEEE Transactions on Antennas and Propagation, vol. 66, no. 12, pp. 7198-7205, Dec. 2018. https://ieeexplore.ieee.org/document/8457320
 
 We also encourage you to cite this package if used in scientific work. Refer to the Zenodo DOI at the top of the page or [CITATION.bib](CITATION.bib).
