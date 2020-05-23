@@ -10,7 +10,7 @@ GRPF attempts to **find all the zeros and poles of a (complex) function in a fix
 
 GRPF first samples the function on a triangular mesh through Delaunay triangulation. Candidate regions to search for roots and poles are determined and the discretized [Cauchy's argument principle](https://en.wikipedia.org/wiki/Argument_principle) is applied _without needing the derivative of the function or integration over the contour_. To improve the accuracy of the results, a self-adaptive mesh refinement occurs inside the identified candidate regions.
 
-![graphenetransmissionline](graphenetransmissionline.svg)
+![simplefcn](simplefcn.svg)
 
 ## Usage
 
