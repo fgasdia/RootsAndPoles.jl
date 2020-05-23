@@ -90,6 +90,10 @@ zroots, zpoles, quadrants, phasediffs = grpf(graphenefunction, origcoords, toler
 
 See [test/](test/) for additional examples.
 
+### Limitations
+
+Note about VoronoiDelaunay dependence using Float64.
+
 ## Citing
 
 Please consider citing Piotr's publications if this code is used in scientific work:

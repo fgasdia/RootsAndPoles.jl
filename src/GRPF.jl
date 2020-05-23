@@ -43,11 +43,11 @@ struct PlotData end
 Store conversion coefficients from the `VoronoiDelaunay` domain to the original
 function domain.
 """
-struct Geometry2Function
-    ra::Float64
-    rb::Float64
-    ia::Float64
-    ib::Float64
+struct Geometry2Function{T<:AbstractFloat}
+    ra::T
+    rb::T
+    ia::T
+    ib::T
 end
 (f::Geometry2Function)(z) = geom2fcn(z, f.ra, f.rb, f.ia, f.ib)
 (f::Geometry2Function)(x, y) = geom2fcn(x, y, f.ra, f.rb, f.ia, f.ib)
@@ -59,11 +59,11 @@ Store conversion coefficients from the `VoronoiDelaunay` domain to the original
 function domain so that a `ScaledFunction` can be called in place of the original
 function when providing an argument in the `VoronoiDelaunay` domain.
 """
-struct ScaledFunction{T <: Function}
-    f::T
-    g2f::Geometry2Function
+struct ScaledFunction{F<:Function,G<:Geometry2Function}
+    fcn::F
+    g2f::G
 end
-(f::ScaledFunction)(z) = f.f(f.g2f(z))
+(f::ScaledFunction)(z) = f.fcn(f.g2f(z))
 
 # These files need the above structs defined
 include("VoronoiDelaunayExtensions.jl")
@@ -71,7 +71,6 @@ include("utils.jl")
 include("coordinate_domains.jl")
 
 export rectangulardomain, diskdomain, grpf, PlotData
-
 
 """
     quadrant(val)
@@ -515,20 +514,21 @@ Identify roots and poles of function based on regions and quadrants.
 function rootsandpoles(
     regions::Vector{Vector{IndexablePoint2D}},
     quadrants::Vector{Int8},
-    g2f::Geometry2Function
-    )
+    g2f::Geometry2Function{T}
+    ) where T
 
     numregions = length(regions)
 
-    zroots = Vector{ComplexF64}() # BUG: potential type instability
-    zpoles = Vector{ComplexF64}()
+    complexT = complex(T)
+    zroots = Vector{complexT}()
+    zpoles = Vector{complexT}()
     for ii in eachindex(regions)
         # XXX: Order of regions?
         quadrantsequence = [quadrants[getindex(node)] for node in regions[ii]]
 
         # Sign flip because `regions[ii]` are in opposite order of Matlab?
         dQ = -diff(quadrantsequence)
-        for jj in eachindex(dQ)
+        @inbounds for jj in eachindex(dQ)
             if dQ[jj] == 3
                 dQ[jj] = -1
             elseif dQ[jj] == -3
@@ -542,9 +542,9 @@ function rootsandpoles(
         z = sum(g2f.(regions[ii]))/length(regions[ii])
 
         if q > 0
-            push!(zroots, z)
+            push!(zroots, convert(complexT, z))  # convert in case T isn't Float64
         elseif q < 0
-            push!(zpoles, z)
+            push!(zpoles, convert(complexT, z))
         end
     end
 
@@ -559,9 +559,9 @@ Label quadrants, identify candidate edges, and iteratively split triangles.
 function tesselate!(
     tess::DelaunayTessellation2D{IndexablePoint2D},
     newnodes::Vector{IndexablePoint2D},
-    f::ScaledFunction,
+    f::ScaledFunction{F,G},
     tolerance
-    )
+    ) where {F,G}
 
     # Initialize
     numnodes = tess._total_points_added
@@ -617,10 +617,10 @@ end
 function tesselate!(
     tess::DelaunayTessellation2D{IndexablePoint2D},
     newnodes::Vector{IndexablePoint2D},
-    f::ScaledFunction,
+    f::ScaledFunction{F,G},
     tolerance,
     ::PlotData
-    )
+    ) where {F,G}
 
     # Initialize
     numnodes = tess._total_points_added
@@ -734,7 +734,6 @@ function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, tolerance, te
 
     g2f = Geometry2Function(ra, rb, ia, ib)
     f = ScaledFunction(fcn, g2f)
-
 
     tess, E, quadrants = tesselate!(tess, newnodes, f, tolerance)
     C = contouredges(tess, E)

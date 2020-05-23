@@ -19,15 +19,33 @@ matlab_zroots = [-0.999999999951224 - 0.000000000028656im,
 
 matlab_zpoles = [0.000000000380455 - 0.999999999701977im]
 
-ggzroots, ggzpoles = grpf(simplefcn, origcoords, tolerance)
+zroots, zpoles = grpf(simplefcn, origcoords, tolerance)
 
-@test length(ggzroots) == 3
-@test length(ggzpoles) == 1
+@test length(zroots) == 3
+@test length(zpoles) == 1
 
-@test approxmatch(ggzroots, matlab_zroots)
-@test approxmatch(ggzpoles, matlab_zpoles)
+@test approxmatch(zroots, matlab_zroots)
+@test approxmatch(zpoles, matlab_zpoles)
 
-ggpzroots, ggpzpoles, quadrants, phasediffs, tess = grpf(simplefcn, origcoords, tolerance, PlotData())
+pzroots, pzpoles, quadrants, phasediffs, tess = grpf(simplefcn, origcoords, tolerance, PlotData())
 
-@test approxmatch(ggpzroots, matlab_zroots)
-@test approxmatch(ggpzpoles, matlab_zpoles)
+@test approxmatch(pzroots, matlab_zroots)
+@test approxmatch(pzpoles, matlab_zpoles)
+
+# Test with big origcoords
+xb = big"-2"  # real part begin
+xe = big"2"  # real part end
+yb = big"-2"  # imag part begin
+ye = big"2"  # imag part end
+r = big"0.1"  # initial mesh step
+tolerance = 1e-9
+
+origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
+
+bzroots, bzpoles = grpf(simplefcn, origcoords, tolerance)
+
+@test all(isa.(bzroots, Complex{BigFloat}))
+@test all(isa.(bzpoles, Complex{BigFloat}))
+
+@test approxmatch(bzroots, zroots)
+@test approxmatch(bzpoles, zpoles)

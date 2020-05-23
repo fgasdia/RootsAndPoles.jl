@@ -50,7 +50,7 @@ function diskdomain(R, Δr)
     h = Δr*sqrt(3)/2
     n = 1 + round(Int, R/h)
     Rn = (1:n)*R/n
-    newnodes = [complex(0.0)]
+    newnodes = [complex(zero(R))]
     f₀ = 0.0
     np = 6
     for ii = 1:n

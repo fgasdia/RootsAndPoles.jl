@@ -67,15 +67,17 @@ matlab_zroots = [-0.856115203791905 + 0.000000000114004im,
 matlab_zpoles = [0.000000000022863 - 0.100000000307523im,
                  0.000000000069120 + 0.100000000307523im]
 
-ggzroots, ggzpoles = grpf(complexmodes, origcoords, tolerance)
+zroots, zpoles = grpf(complexmodes, origcoords, tolerance)
 
-@test length(ggzroots) == 12
-@test length(ggzpoles) == 2
+@test length(zroots) == 12
+@test length(zpoles) == 2
 
-@test approxmatch(ggzroots, matlab_zroots)
-@test approxmatch(ggzpoles, matlab_zpoles)
+@test approxmatch(zroots, matlab_zroots)
+@test approxmatch(zpoles, matlab_zpoles)
 
-ggpzroots, ggpzpoles, quadrants, phasediffs, tess = grpf(complexmodes, origcoords, tolerance, PlotData())
+pzroots, pzpoles, quadrants, phasediffs, tess = grpf(complexmodes, origcoords, tolerance, PlotData())
 
-@test approxmatch(ggpzroots, matlab_zroots)
-@test approxmatch(ggpzpoles, matlab_zpoles)
+@test approxmatch(pzroots, matlab_zroots)
+@test approxmatch(pzpoles, matlab_zpoles)
+
+# Can't test with big values because of special functions (bessel)
