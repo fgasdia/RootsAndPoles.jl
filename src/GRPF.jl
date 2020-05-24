@@ -381,30 +381,8 @@ function contouredges(
         end
     end
 
-    # TODO: implement a unique! that matches this?
-    # Try making hashes and then calling unique - see how many there are
-
-    deleteidxs = trues(length(C))
-    for i in eachindex(C)
-        @inbounds edgei = C[i]
-        eia = getindex(geta(edgei))
-        eib = getindex(getb(edgei))
-        revdupe = false
-        for j in eachindex(C)
-            @inbounds edgej = C[j]
-            eja = getindex(geta(edgej))
-            ejb = getindex(getb(edgej))
-            if (eia == ejb) & (eib == eja)
-                revdupe = true
-                break
-            end
-        end
-        if !revdupe
-            deleteidxs[i] = false
-        end
-    end
-
-    deleteat!(C, deleteidxs)
+    # Remove duplicate edges
+    sameunique!(C)
 
     return C
 end

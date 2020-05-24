@@ -62,7 +62,7 @@ function same(e1::DelaunayEdge{IndexablePoint2D},e2::DelaunayEdge{IndexablePoint
     # if they're reversed
     e1a, e1b = geta(e1)._index, getb(e1)._index
     e2a, e2b = geta(e2)._index, getb(e2)._index
-    (e1a == e2b) & (e1b == e2a) && return true
+    (e1a == e2b) && (e1b == e2a) && return true
 
     return false
 end
@@ -70,11 +70,31 @@ end
 """
     sameunique!
 
-A specialized version of `unique!` that considers both directions of edges the
-same (just like [`same`](@ref)).
+In-place `unique!` that considers both directions of edges the same (just like
+[`same`](@ref)).
 """
 function sameunique!(v::AbstractVector{DelaunayEdge{IndexablePoint2D}})
-    unique!(x->hash(getindex(geta(x)))+hash(getindex(getb(x))), v)
+    deleteidxs = trues(length(v))
+    for i in eachindex(v)
+        @inbounds edgei = C[i]
+        eia = getindex(geta(edgei))
+        eib = getindex(getb(edgei))
+        revdupe = false
+        for j in eachindex(v)
+            @inbounds edgej = v[j]
+            eja = getindex(geta(edgej))
+            ejb = getindex(getb(edgej))
+            if (eia == ejb) && (eib == eja)
+                revdupe = true
+                break
+            end
+        end
+        if !revdupe
+            deleteidxs[i] = false
+        end
+    end
+
+    deleteat!(v, deleteidxs)
 end
 
 # Improved performance of `delaunayedges()`
