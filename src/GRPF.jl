@@ -114,12 +114,12 @@ include("coordinate_domains.jl")
 export rectangulardomain, diskdomain, grpf, PlotData, GRPFParams
 
 """
-    quadrant(val)
+    quadrant(val)::Int8
 
 Convert complex function value `val` to quadrant number.
 """
 @inline function quadrant(val)::Int8
-    # NOTE: This function correponds to `vinq.m`
+    # This function correponds to `vinq.m`
 
     rv, iv = reim(val)
     if (rv > 0) & (iv >= 0)
@@ -135,11 +135,12 @@ Convert complex function value `val` to quadrant number.
 end
 
 """
-    assignquadrants!(quadrants, nodes, fcn)
+    assignquadrants!(quadrants, nodes, f)
 
-Evaluate `fcn` for [`quadrant`](@ref) at `nodes` and fill `quadrants`.
+Evaluate function `f` for [`quadrant`](@ref) at `nodes` and fill `quadrants`.
 
-`quadrants` is a Vector{} where each index corresponds to `node` index.
+`quadrants` is a vector where each index corresponds to `IndexablePoint2D` node
+index.
 """
 @inline function assignquadrants!(
     quadrants::Vector{<:Integer},
@@ -154,18 +155,16 @@ Evaluate `fcn` for [`quadrant`](@ref) at `nodes` and fill `quadrants`.
 end
 
 """
-    candidateedges!(tess, quadrants)
+    candidateedges!(E, tess, quadrants)
 
-Return candidate edges ``𝓔`` that contain a phase change of 2 quadrants.
+Fill in candidate edges `E` that contain a phase change of 2 quadrants.
 
-Any root or pole is located at the point where the regions described by four different
-quadrants meet. Since any triangulation of the four nodes located in the four different
-quadrants requires at least one edge of ``|ΔQ| = 2``, then all such edges are potentially
-in the vicinity of a root or pole.
+Any root or pole is located at the point where the regions described by four
+different quadrants meet. Since any triangulation of the four nodes located in
+the four different quadrants requires at least one edge of ``|ΔQ| = 2``, then
+all such edges are potentially in the vicinity of a root or pole.
 
-Note:
-
-  - Order of ``𝓔`` is not guaranteed.
+Order of `E` is not guaranteed.
 """
 function candidateedges!(
     E::Vector{DelaunayEdge{IndexablePoint2D}},
@@ -216,7 +215,7 @@ end
 """
     candidateedges!(E, tess, quadrants, ::PlotData)
 
-Return candidate edges ``𝓔`` and the `phasediffs` across each edge.
+Return candidate edges `E` and the `phasediffs` across each edge.
 """
 function candidateedges!(
     E::Vector{DelaunayEdge{IndexablePoint2D}},
@@ -237,7 +236,7 @@ function candidateedges!(
             idxa, idxb = idxb, idxa
         end
 
-        @inbounds ΔQ = mod(quadrants[idxa] - quadrants[idxb], 4)  # phase difference
+        @inbounds ΔQ = mod(quadrants[idxa] - quadrants[idxb], Int8(4))  # phase difference
         if ΔQ == 2
             push!(E, edge)
         end
@@ -249,42 +248,34 @@ function candidateedges!(
 end
 
 """
-    counttriangleswithnodes(tess, edges)
+    counttrianglenodes(triangle, edge_idxs)
 
-Count how many times each triangle contains a node in `edges`.
+Count how many times each triangle of `tess` contains a node with index in
+`edge_idxs`.
 """
-function counttriangleswithnodes(
-    tess::DelaunayTessellation2D{IndexablePoint2D},
-    edges::Vector{DelaunayEdge{IndexablePoint2D}}
+function counttrianglenodes(
+    triangle::DelaunayTriangle{IndexablePoint2D},
+    edge_idxs::Vector{<:Integer}
     )
 
-    # Get unique indices of nodes in `edges`
-    idxs = uniqueindices(edges)
+    # TODO: Don't even do a full count, just return 0, 1, 2 for zones
 
-    trianglecounts = Vector{Int}()
-    sizehint!(trianglecounts, tess._last_trig_index)  # not exactly this number
+    na = geta(triangle)
+    nb = getb(triangle)
+    nc = getc(triangle)
 
-    triidx = 0
-    for triangle in tess
-        triidx += 1
-        # WARNING: `triangle` is in general not equal to `tess._trigs[triidx]`
-        na = geta(triangle)
-        nb = getb(triangle)
-        nc = getc(triangle)
+    nai = getindex(na)
+    nbi = getindex(nb)
+    nci = getindex(nc)
 
-        nai = getindex(na)
-        nbi = getindex(nb)
-        nci = getindex(nc)
-
-        tricount = 0
-        for idx in idxs
-            if (nai == idx) | (nbi == idx) | (nci == idx)
-                tricount += 1
-            end
+    tricount = 0
+    for idx in edge_idxs
+        if (nai == idx) | (nbi == idx) | (nci == idx)
+            tricount += 1
         end
-        push!(trianglecounts, tricount)
     end
-    return trianglecounts
+
+    return tricount
 end
 
 """
@@ -293,7 +284,7 @@ end
 Return unique indices of all nodes in `edges`.
 """
 @inline function uniqueindices(edges::Vector{DelaunayEdge{IndexablePoint2D}})
-    idxs = Int[]
+    idxs = Vector{Int}()
     for i in eachindex(edges)
         @inbounds ei = edges[i]
         push!(idxs, getindex(geta(ei)))
@@ -402,6 +393,7 @@ function contouredges(
     )
 
     C = Vector{DelaunayEdge{IndexablePoint2D}}()
+    sizehint!(C, length(edges))
 
     # Edges of triangles that contain at least 1 of `edges`
     for triangle in tess
@@ -426,7 +418,7 @@ function contouredges(
 end
 
 """
-    splittriangles!(newnodes, tess, trianglecounts, params)
+    splittriangles!(newnodes, tess, edge_idxs, params)
 
 Add zone 2 triangles to `newnodes` and then return a vector of zone 1 triangles,
 which require special handling.
@@ -434,16 +426,13 @@ which require special handling.
 function splittriangles!(
     newnodes::AbstractVector,
     tess::DelaunayTessellation2D{IndexablePoint2D},
-    trianglecounts::Vector{<:Integer},
+    edge_idxs::Vector{<:Integer},
     params::GRPFParams
     )
 
     zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
-
-    ii = 0
     for triangle in tess
-        ii += 1
-        @inbounds tricount = trianglecounts[ii]
+        tricount = counttrianglenodes(triangle, edge_idxs)
 
         if tricount > 1
             push!(zone1triangles, triangle)
@@ -553,7 +542,7 @@ function evaluateregions!(
 end
 
 """
-    rootsandpoles(regions, quadrants, geom2fcn)
+    rootsandpoles(regions, quadrants, g2f)
 
 Identify roots and poles of function based on regions and quadrants.
 """
@@ -643,11 +632,12 @@ function tesselate!(
         maxElength = maximum(distance(g2f(e)) for e in selectE)
         maxElength < params.tolerance && return tess, E, quadrants
 
-        # How many times does each triangle contain a `selectE` node?
-        trianglecounts = counttriangleswithnodes(tess, selectE)
+        # Get unique indices of nodes in `edges`
+        edge_idxs = uniqueindices(selectE)
 
+        # Refine (split) triangles
         newnodes = Vector{IndexablePoint2D}()
-        zone1triangles = splittriangles!(newnodes, tess, trianglecounts, params)
+        zone1triangles = splittriangles!(newnodes, tess, edge_idxs, params)
 
         # Add new nodes in zone 1
         zone1newnodes!(newnodes, zone1triangles, g2f, params.tolerance)
@@ -690,7 +680,7 @@ function tesselate!(
         numnodes += numnewnodes
 
         # Determine candidate edges that may be near a root or pole
-        empty!(E)  # we always start with a blank E
+        empty!(E)  # always start with a blank E
         E, phasediffs = candidateedges!(E, tess, quadrants, PlotData())
         isempty(E) && error("No roots found in the domain")
 
@@ -702,11 +692,14 @@ function tesselate!(
         maxElength = maximum(distance(g2f(e)) for e in selectE)
         maxElength < params.tolerance && return tess, E, quadrants, phasediffs
 
-        # How many times does each triangle contain a `selectE` node?
-        trianglecounts = counttriangleswithnodes(tess, selectE)
+        # Get unique indices of nodes in `edges`
+        edge_idxs = uniqueindices(selectE)
 
+        # Refine (split) triangles
         newnodes = Vector{IndexablePoint2D}()
-        zone1triangles = splittriangles!(newnodes, tess, trianglecounts, params)
+        zone1triangles = splittriangles!(newnodes, tess, edge_idxs, params)
+
+        # Add new nodes in zone 1
         zone1newnodes!(newnodes, zone1triangles, g2f, params.tolerance)
 
         # Have to assign indexes to new nodes (which are all currently -1)
@@ -740,13 +733,13 @@ julia> roots, poles = grpf(simplefcn, origcoords);
 
 julia> roots
 3-element Array{Complex{Float64},1}:
-    -0.9999999999512241 - 2.865605189037104e-11im
-     0.9999999996829548 - 6.208811242913729e-11im
- 1.9022756703179778e-10 + 1.0000000000372526im
+    -0.9999999998508017 - 8.765385802810127e-11im
+ 1.3587683359414186e-10 + 1.0000000001862643im
+     1.0000000002536367 + 1.0339757656912847e-26im
 
- julia> poles
- 1-element Array{Complex{Float64},1}:
- -3.8045513406359555e-10 - 1.0000000002235174im
+julia> poles
+1-element Array{Complex{Float64},1}:
+ -2.5363675604239815e-10 - 1.0000000002980232im
 ```
 """
 function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, params=GRPFParams())
@@ -805,16 +798,6 @@ julia> r = 0.1
 julia> origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 
 julia> roots, poles, quadrants, phasediffs = grpf(simplefcn, origcoords, PlotData());
-
-julia> roots
-3-element Array{Complex{Float64},1}:
-    -0.9999999999512241 - 2.865605189037104e-11im
-     0.9999999996829548 - 6.208811242913729e-11im
- 1.9022756703179778e-10 + 1.0000000000372526im
-
- julia> poles
- 1-element Array{Complex{Float64},1}:
- -3.8045513406359555e-10 - 1.0000000002235174im
 ```
 """
 function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, ::PlotData, params=GRPFParams())

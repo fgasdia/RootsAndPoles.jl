@@ -53,11 +53,11 @@ zroots, zpoles = grpf(simplefcn, origcoords)
 
 ### Additional parameters
 
-Additional parameters can be provided to the tesselation and GRPF algorithms by explicitly passing a `GRPFParams` struct. The two most useful parameters are `tess_sizehint` for the final total number of nodes in the internal `DelaunayTessellation2D` object and the root finder `tolerance` at which the mesh refinement stops. Specifically, `tolerance` is the smallest triangle edge length of the candidate edges (defined in the `origcoords` domain).
+Additional parameters can be provided to the tesselation and GRPF algorithms by explicitly passing a `GRPFParams` struct. The two most useful parameters are `tess_sizehint` for the final total number of nodes in the internal `DelaunayTessellation2D` object and the root finder `tolerance` at which the mesh refinement stops. Specifically, `tolerance` is the largest triangle edge length of the candidate edges (defined in the `origcoords` domain).
 
 By default, the value of `tess_sizehint` is 5000 and the `tolerance` is 1e-9, but they can be specified by providing the `GRPFParams` argument
 ```julia
-zroots, zpoles = grpf(simplefcn, origcoords, tolerance, GRPFParams(8000, 1e-12))
+zroots, zpoles = grpf(simplefcn, origcoords, GRPFParams(8000, 1e-12))
 ```
 
 Additional parameters which can be controlled are `maxiterations`, `maxnodes`, and `skinnytriangle`. `maxiterations` sets the maximum number of mesh refinement iterations and `maxnodes` sets the maximum number of nodes allowed in the `DelaunayTessellation2D` before returning. `skinnytriangle` is the maximum allowed ratio of the longest to shortest side length in a tesselation triangle before the triangle is automatically subdivided in the mesh refinement step. Default values are
@@ -75,7 +75,7 @@ zroots, zpoles = grpf(simplefcn, origcoords, tolerance, GRPFParams(200, 10000, 3
 
 If mesh node `quadrants` and `phasediffs` are wanted for plotting, simply pass a `PlotData()` instance.
 ```julia
-zroots, zpoles, quadrants, phasediffs = grpf(graphenefunction, origcoords, tolerance, PlotData())
+zroots, zpoles, quadrants, phasediffs = grpf(graphenefunction, origcoords, PlotData())
 ```
 
 ### Additional examples
