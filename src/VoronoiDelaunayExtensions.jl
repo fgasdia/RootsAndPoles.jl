@@ -66,6 +66,10 @@ function Base.:(==)(e1::DelaunayEdge{IndexablePoint2D},e2::DelaunayEdge{Indexabl
     return false
 end
 
+# Need to implement hash so `hash(e1) == hash(e2)` for `unique!` to work
+Base.hash(e::DelaunayEdge{IndexablePoint2D}) = hash(hash(geta(e)) + hash(getb(e)), zero(UInt))
+Base.hash(e::DelaunayEdge{IndexablePoint2D}, h::UInt) = hash(hash(geta(e)) + hash(getb(e)), h)
+
 # Improved performance of `delaunayedges()`
 # see: https://github.com/JuliaGeometry/VoronoiDelaunay.jl/issues/47
 function delaunayedges_fast(t::DelaunayTessellation2D{T}) where T <: AbstractPoint2D
