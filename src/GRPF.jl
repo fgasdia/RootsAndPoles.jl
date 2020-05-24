@@ -606,7 +606,7 @@ function tesselate!(
     quadrants = Vector{Int8}()
 
     iteration = 0
-    while (iteration < params.maxiterations) && (numnodes < params.maxnodes)
+    while (iteration < params.maxiterations) & (numnodes < params.maxnodes)
         iteration += 1
 
         # Determine which quadrant function value belongs at each node
@@ -666,7 +666,7 @@ function tesselate!(
     quadrants = Vector{Int8}()
 
     iteration = 0
-    while (iteration < params.maxiterations) && (numnodes < params.maxnodes)
+    while (iteration < params.maxiterations) & (numnodes < params.maxnodes)
         iteration += 1
 
         # Determine which quadrant function value belongs at each node
