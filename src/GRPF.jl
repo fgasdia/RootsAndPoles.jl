@@ -258,8 +258,6 @@ function counttrianglenodes(
     edge_idxs::Vector{<:Integer}
     )
 
-    # TODO: Don't even do a full count, just return 0, 1, 2 for zones
-
     na = geta(triangle)
     nb = getb(triangle)
     nc = getc(triangle)
@@ -268,6 +266,8 @@ function counttrianglenodes(
     nbi = getindex(nb)
     nci = getindex(nc)
 
+    # julia 1.4.1: faster to keep counting than to keep checking if tricount > 1,
+    # which is all we actually care about
     tricount = 0
     for idx in edge_idxs
         if (nai == idx) | (nbi == idx) | (nci == idx)
@@ -374,7 +374,7 @@ function contouredges(
         edgec = DelaunayEdge(pc, pa)
 
         for edge in edges
-            if same(edgea, edge) | same(edgeb, edge) | same(edgec, edge)
+            if same(edgea, edge) || same(edgeb, edge) || same(edgec, edge)
                 push!(C, edgea, edgeb, edgec)
                 break  # only count each triangle once
             end
@@ -607,7 +607,7 @@ function tesselate!(
     quadrants = Vector{Int8}()
 
     iteration = 0
-    while (iteration < params.maxiterations) & (numnodes < params.maxnodes)
+    while (iteration < params.maxiterations) && (numnodes < params.maxnodes)
         iteration += 1
 
         # Determine which quadrant function value belongs at each node
@@ -667,7 +667,7 @@ function tesselate!(
     quadrants = Vector{Int8}()
 
     iteration = 0
-    while (iteration < params.maxiterations) & (numnodes < params.maxnodes)
+    while (iteration < params.maxiterations) && (numnodes < params.maxnodes)
         iteration += 1
 
         # Determine which quadrant function value belongs at each node

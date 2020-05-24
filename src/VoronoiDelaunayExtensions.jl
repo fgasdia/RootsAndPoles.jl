@@ -76,7 +76,7 @@ In-place `unique!` that considers both directions of edges the same (just like
 function sameunique!(v::AbstractVector{DelaunayEdge{IndexablePoint2D}})
     deleteidxs = trues(length(v))
     for i in eachindex(v)
-        @inbounds edgei = C[i]
+        @inbounds edgei = v[i]
         eia = getindex(geta(edgei))
         eib = getindex(getb(edgei))
         revdupe = false

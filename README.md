@@ -6,7 +6,8 @@ A Julia implementation of [GRPF](https://github.com/PioKow/GRPF) by Piotr Kowalc
 
 ## Description
 
-GRPF attempts to **find all the zeros and poles of a (complex) function in a fixed region**. These types of problems are frequently encountered in electromagnetics, but the algorithm can also be used for similar problems in e.g. optics, acoustics, etc.
+GRPF attempts to **find all the zeros and poles of a complex valued function
+with complex arguments in a fixed region**. These types of problems are frequently encountered in electromagnetics, but the algorithm can also be used for similar problems in e.g. optics, acoustics, etc.
 
 GRPF first samples the function on a triangular mesh through Delaunay triangulation. Candidate regions to search for roots and poles are determined and the discretized [Cauchy's argument principle](https://en.wikipedia.org/wiki/Argument_principle) is applied _without needing the derivative of the function or integration over the contour_. To improve the accuracy of the results, a self-adaptive mesh refinement occurs inside the identified candidate regions.
 
@@ -39,7 +40,7 @@ r = 0.1  # initial mesh step
 tolerance = 1e-9
 ```
 
-This package includes convenience functions for rectangular and disk shaped domains, but any shape can be used. `origcoords` below is simply a vector of complex numbers containing the original mesh coordinates which will be Delaunay triangulated. For maximum efficiency, the original mesh nodes should form equilateral triangles.
+This package includes convenience functions for rectangular and disk shaped domains, but any "shape" can be used. `origcoords` below is simply a vector of complex numbers containing the original mesh coordinates which will be Delaunay triangulated. For maximum efficiency, the original mesh nodes should form equilateral triangles.
 ```julia
 using GRPF
 
@@ -53,11 +54,13 @@ zroots, zpoles = grpf(simplefcn, origcoords)
 
 ### Additional parameters
 
-Additional parameters can be provided to the tesselation and GRPF algorithms by explicitly passing a `GRPFParams` struct. The two most useful parameters are `tess_sizehint` for the final total number of nodes in the internal `DelaunayTessellation2D` object and the root finder `tolerance` at which the mesh refinement stops. Specifically, `tolerance` is the largest triangle edge length of the candidate edges (defined in the `origcoords` domain).
+Additional parameters can be provided to the tesselation and GRPF algorithms by explicitly passing a `GRPFParams` struct.
+
+The two most useful parameters are `tess_sizehint` for the final total number of nodes in the internal `DelaunayTessellation2D` object and the root finder `tolerance` at which the mesh refinement stops. Just like `sizehint!` for other collections, setting `tess_sizehint` to a value approximately equal to the final number of nodes in the tesselation can improve performance. `tolerance` is the largest triangle edge length of the candidate edges defined in the `origcoords` domain. In practice, the root and pole accuracy is a larger value than `tolerance`, so `tolerance` needs to be set smaller than the desired tolerance on the roots and poles.
 
 By default, the value of `tess_sizehint` is 5000 and the `tolerance` is 1e-9, but they can be specified by providing the `GRPFParams` argument
 ```julia
-zroots, zpoles = grpf(simplefcn, origcoords, GRPFParams(8000, 1e-12))
+zroots, zpoles = grpf(simplefcn, origcoords, GRPFParams(5000, 1e-9))
 ```
 
 Additional parameters which can be controlled are `maxiterations`, `maxnodes`, and `skinnytriangle`. `maxiterations` sets the maximum number of mesh refinement iterations and `maxnodes` sets the maximum number of nodes allowed in the `DelaunayTessellation2D` before returning. `skinnytriangle` is the maximum allowed ratio of the longest to shortest side length in a tesselation triangle before the triangle is automatically subdivided in the mesh refinement step. Default values are
@@ -68,7 +71,7 @@ Additional parameters which can be controlled are `maxiterations`, `maxnodes`, a
 
 These can be specified along with the `tess_sizehint` and `tolerance` as, e.g.
 ```julia
-zroots, zpoles = grpf(simplefcn, origcoords, tolerance, GRPFParams(200, 10000, 3, 8000, 1e-12))
+zroots, zpoles = grpf(simplefcn, origcoords, tolerance, GRPFParams(100, 500000, 3, 5000, 1e-9))
 ```
 
 ### Plot data
@@ -76,6 +79,11 @@ zroots, zpoles = grpf(simplefcn, origcoords, tolerance, GRPFParams(200, 10000, 3
 If mesh node `quadrants` and `phasediffs` are wanted for plotting, simply pass a `PlotData()` instance.
 ```julia
 zroots, zpoles, quadrants, phasediffs = grpf(graphenefunction, origcoords, PlotData())
+```
+
+A `GRPFParams` can also be passed.
+```julia
+zroots, zpoles, quadrants, phasediffs = grpf(graphenefunction, origcoords, PlotData(), GRPFParams(5000, 1e-9))
 ```
 
 ### Additional examples
