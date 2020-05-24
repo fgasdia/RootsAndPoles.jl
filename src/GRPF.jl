@@ -357,7 +357,7 @@ end
 
 Find contour edges from all candidate edges.
 """
-function contouredges_new(
+function contouredges(
     tess::DelaunayTessellation2D{IndexablePoint2D},
     edges::Vector{DelaunayEdge{IndexablePoint2D}}
     )
@@ -381,6 +381,7 @@ function contouredges_new(
         end
     end
 
+    # TODO: implement a unique! that matches this?
     deleteidxs = trues(length(C))
     for idxa in eachindex(C)
         @inbounds edgea = C[idxa]
