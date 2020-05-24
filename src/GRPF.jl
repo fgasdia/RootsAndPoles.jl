@@ -353,6 +353,57 @@ end
 end
 
 """
+    contouredges(tess, edges)
+
+Find contour edges from all candidate edges.
+"""
+function contouredges_new(
+    tess::DelaunayTessellation2D{IndexablePoint2D},
+    edges::Vector{DelaunayEdge{IndexablePoint2D}}
+    )
+
+    C = Vector{DelaunayEdge{IndexablePoint2D}}()
+    sizehint!(C, length(edges))
+
+    # Edges of triangles that contain at least 1 of `edges`
+    for triangle in tess
+        pa, pb, pc = geta(triangle), getb(triangle), getc(triangle)
+
+        edgea = DelaunayEdge(pa, pb)
+        edgeb = DelaunayEdge(pb, pc)
+        edgec = DelaunayEdge(pc, pa)
+
+        for edge in edges
+            if same(edgea, edge) | same(edgeb, edge) | same(edgec, edge)
+                push!(C, edgea, edgeb, edgec)
+                break  # only count each triangle once
+            end
+        end
+    end
+
+    deleteidxs = trues(length(C))
+    for idxa in eachindex(C)
+        @inbounds edgea = C[idxa]
+        dupe = false
+        for idxb in eachindex(C)
+            @inbounds edgeb = C[idxb]
+            # Check if Edge(a,b) == Edge(b, a), i.e. if there are duplicate edges
+            if edgea == DelaunayEdge(getb(edgeb), geta(edgeb))
+                dupe = true
+                break
+            end
+        end
+        if !dupe
+            deleteidxs[idxa] = false
+        end
+    end
+
+    deleteat!(C, deleteidxs)
+
+    return C
+end
+
+"""
     zone2newnodes!(newnodes, triangle, skinnytriangle)
 
 Add node to `newnodes` for zone 2 ("skinny") triangles.
@@ -380,40 +431,6 @@ length of each triangle.
     end
 
     return nothing
-end
-
-"""
-    contouredges(tess, edges)
-
-Find contour edges from all candidate edges.
-"""
-function contouredges(
-    tess::DelaunayTessellation2D{IndexablePoint2D},
-    edges::Vector{DelaunayEdge{IndexablePoint2D}}
-    )
-
-    C = Vector{DelaunayEdge{IndexablePoint2D}}()
-    sizehint!(C, length(edges))
-
-    # Edges of triangles that contain at least 1 of `edges`
-    for triangle in tess
-        pa, pb, pc = geta(triangle), getb(triangle), getc(triangle)
-
-        edgea = DelaunayEdge(pa, pb)
-        edgeb = DelaunayEdge(pb, pc)
-        edgec = DelaunayEdge(pc, pa)
-
-        for edge in edges
-            if same(edgea, edge) | same(edgeb, edge) | same(edgec, edge)
-                push!(C, edgea, edgeb, edgec)
-                break  # only count each triangle once
-            end
-        end
-    end
-
-    sameunique!(C)
-
-    return C
 end
 
 """
