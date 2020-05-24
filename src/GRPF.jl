@@ -404,15 +404,14 @@ function contouredges(
         edgec = DelaunayEdge(pc, pa)
 
         for edge in edges
-            if (edgea == edge) | (edgeb == edge) | (edgec == edge)
+            if same(edgea, edge) | same(edgeb, edge) | same(edgec, edge)
                 push!(C, edgea, edgeb, edgec)
                 break  # only count each triangle once
             end
         end
     end
 
-    # Remove duplicate edges. This uses custom `==` for `IndexablePoint2D`
-    unique!(C)
+    sameunique!(C)
 
     return C
 end

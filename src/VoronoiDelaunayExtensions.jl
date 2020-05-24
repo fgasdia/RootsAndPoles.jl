@@ -25,6 +25,7 @@ Base.:/(p1::IndexablePoint2D, n::Real) = IndexablePoint2D(getx(p1)/n, gety(p1)/n
 Return `_index` field of `p`.
 """
 Base.getindex(p::IndexablePoint2D) = p._index
+
 """
     setindex!(p::IndexablePoint2D)
 
@@ -47,15 +48,15 @@ julia> getindex(p)
 Base.setindex!(p::IndexablePoint2D, v::Int) = setfield!(p, :_index, v)
 
 """
-    ==(e1::DelaunayEdge{IndexablePoint2D}, e2::DelaunayEdge{IndexablePoint2D})
+    same(e1::DelaunayEdge{IndexablePoint2D}, e2::DelaunayEdge{IndexablePoint2D})
 
 Return `true` if edge `e1` is the same as `e2`, regardless of direction.
-Otherwise, return `false`.
+Otherwise, return `false`. This is similar to `==`.
 
 To check if two edges are identical in the sense that no program could
 distinguish them, use `===`.
 """
-function Base.:(==)(e1::DelaunayEdge{IndexablePoint2D},e2::DelaunayEdge{IndexablePoint2D})
+function same(e1::DelaunayEdge{IndexablePoint2D},e2::DelaunayEdge{IndexablePoint2D})
     e1 === e2 && return true
 
     # if they're reversed
@@ -66,9 +67,15 @@ function Base.:(==)(e1::DelaunayEdge{IndexablePoint2D},e2::DelaunayEdge{Indexabl
     return false
 end
 
-# Need to implement hash so `hash(e1) == hash(e2)` for `unique!` to work
-Base.hash(e::DelaunayEdge{IndexablePoint2D}) = hash(hash(geta(e)) + hash(getb(e)), zero(UInt))
-Base.hash(e::DelaunayEdge{IndexablePoint2D}, h::UInt) = hash(hash(geta(e)) + hash(getb(e)), h)
+"""
+    sameunique!
+
+A specialized version of `unique!` that considers both directions of edges the
+same (just like [`same`](@ref)).
+"""
+function sameunique!(v::AbstractVector{DelaunayEdge{T}}) where T
+    unique!(x->hash(geta(x))+hash(getb(x)), v)
+end
 
 # Improved performance of `delaunayedges()`
 # see: https://github.com/JuliaGeometry/VoronoiDelaunay.jl/issues/47
