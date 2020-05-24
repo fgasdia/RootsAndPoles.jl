@@ -73,7 +73,7 @@ end
 A specialized version of `unique!` that considers both directions of edges the
 same (just like [`same`](@ref)).
 """
-function sameunique!(v::AbstractVector{DelaunayEdge{T}}) where T
+function sameunique!(v::AbstractVector{DelaunayEdge{IndexablePoint2D}})
     unique!(x->hash(getindex(geta(x)))+hash(getindex(getb(x))), v)
 end
 
