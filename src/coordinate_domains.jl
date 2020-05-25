@@ -1,39 +1,40 @@
 """
     rectangulardomain(Zb, Ze, Δr)
 
-Generate initial mesh node coordinates for a rectangular domain ∈ {`Zb` to `Ze`} with
+Generate initial mesh node coordinates for a rectangular domain ∈ {`Zb`, `Ze`} with
 initial mesh step `Δr`.
-
-See also: `rect_dom.m`
 """
 function rectangulardomain(Zb::Complex, Ze::Complex, Δr)
-    X = real(Ze) - real(Zb)
-    Y = imag(Ze) - imag(Zb)
+    rZb, iZb = reim(Zb)
+    rZe, iZe = reim(Ze)
 
-    # BUG?: Why are n and m in real and imag (x and y) different?
+    X = rZe - rZb
+    Y = iZe - iZb
+
     n = ceil(Int, Y/Δr + 1)
     dy = Y/(n-1)
     m = ceil(Int, X/sqrt(Δr^2 - dy^2/4) + 1)
     dx = X/(m-1)
 
-    vx = range(real(Zb), length=m, stop=real(Ze))
-    vy = range(imag(Zb), length=n, stop=imag(Ze))
+    vx = range(rZb, stop=rZe, length=m)
+    vy = range(iZb, stop=iZe, length=n)
 
-    tmp = ones(n)
-    tmp[n] = 0.0
-
-    # TODO: This looks _so_ matlaby
     y = repeat(vy, m)
-    y .+= 0.5*dy*kron((1 .+ (-1).^(1:m))/2, tmp)
-    y = [y; fill(imag(Zb), size(2:2:m))]
-    x = reshape(repeat(vx', n), m*n)
-    x = [x; ((2:2:m) .- 1)*dx .+ real(Zb)]
 
-    # NOTE: Matlab values of `x` differ slightly because of Matlab's float handling and
-    # transpose operator.
-    # `sum(x)` is much closer between Julia and Matlab if the above line for `x` is:
-    # x = [x' ((2:2:m) .- 1)'*dx .+ real(Zb)]'
-    # x = reshape(x, length(x))
+    half_dy = dy/2
+    on = false
+    for i in eachindex(y)
+        if i % n == 0
+            on = !on
+        elseif on
+            y[i] += half_dy
+        end
+    end
+
+    y = vcat(y, fill(iZb, div(m,2)))  # TODO: why?
+
+    x = repeat(vx, inner=n)
+    x = vcat(x, (1:2:(m-1))*dx .+ rZb)
 
     return complex.(x, y)
 end
@@ -43,21 +44,34 @@ end
 
 Generate initial mesh coordinates for a circular disk domain of radius `R` and center (0, 0)
 for ``|z| < R``.
-
-See also: `disk_dom.m`
 """
-function diskdomain(R, Δr)
+function diskdomain_new(R, Δr)
     h = Δr*sqrt(3)/2
     n = 1 + round(Int, R/h)
-    Rn = (1:n)*R/n
-    newnodes = [complex(zero(R))]
+    R_n = R/n
+
     f₀ = 0.0
     np = 6
+
+    f₀step = π/(6n)
+
+    newnodes = Vector{complex(typeof(R))}(undef, 6*sum(1:n)+1)
+    newnodes[1] = 0
+
+    idx = 2
     for ii = 1:n
-        f = f₀ .+ range(0, stop=2π, length=np+1)
-        xyn = Rn[ii]*cis.(f[1:end-1])
-        append!(newnodes, xyn)
-        f₀ += π/6/n
+        # precalculate
+        iiR_n = ii*R_n
+        step = 2π/np
+
+        for jj = 0:np-1
+            f = f₀ + step*jj
+
+            newnodes[idx] = iiR_n*cis(f)
+            idx += 1
+        end
+
+        f₀ += f₀step
         np += 6
     end
     return newnodes
