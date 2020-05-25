@@ -39,6 +39,50 @@ function rectangulardomain(Zb::Complex, Ze::Complex, Δr)
     return complex.(x, y)
 end
 
+
+function rectangulardomain_new(Zb::Complex, Ze::Complex, Δr)
+    rZb, iZb = reim(Zb)
+    rZe, iZe = reim(Ze)
+
+    X = rZe - rZb
+    Y = iZe - iZb
+
+    n = ceil(Int, Y/Δr + 1)
+    dy = Y/(n-1)
+    half_dy = dy/2
+
+    m = ceil(Int, X/sqrt(Δr^2 - dy^2/4) + 1)
+    dx = X/(m-1)
+
+    vlength = m*n + div(m, 2)
+    v = Vector{promote_type(typeof(Zb), typeof(Zb))}(undef, vlength)
+
+    I = LinearIndices(v)
+    @inbounds for j in 0:n-1, i in 0:m-1
+        x = rZb + dx*i
+        y = iZb + dy*j
+
+        on = false
+        if j % n == 0
+            on = !on
+        elseif on
+            y += half_dy
+        end
+        v[I[i+1,j+1]] = complex(x, y)
+    end
+
+    # The "extra" rows or columns still cover the whole range from `Zb` to `Ze`
+    # TODO: finish this part!
+
+    y = vcat(y, fill(iZb, div(m,2)))
+
+    x = repeat(vx, inner=n)
+    x = vcat(x, (1:2:(m-1))*dx .+ rZb)
+
+    return complex.(x, y)
+end
+
+
 """
     diskdomain(R, Δr)
 
