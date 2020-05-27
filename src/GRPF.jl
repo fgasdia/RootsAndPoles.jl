@@ -178,10 +178,13 @@ function candidateedges!(
         tr = tess._trigs[ix]
         isexternal(tr) && continue
 
+        # precalculate
+        atr, btr, ctr = geta(tr), getb(tr), getc(tr)
+        atri, btri, ctri = getindex(atr), getindex(btr), getindex(ctr)
+
         ix_na = tr._neighbour_a
-        if (ix_na > ix) | isexternal(tess._trigs[ix_na])
-            btr, ctr = getb(tr), getc(tr)
-            ΔQ = mod(quadrants[getindex(btr)] - quadrants[getindex(ctr)], 4)  # phase difference
+        if (ix_na > ix) || isexternal(tess._trigs[ix_na])
+            ΔQ = mod(quadrants[btri] - quadrants[ctri], 4)  # phase difference
             if ΔQ == 2
                 edge = DelaunayEdge(btr, ctr)
                 push!(E, edge)
@@ -189,9 +192,8 @@ function candidateedges!(
         end
 
         ix_nb = tr._neighbour_b
-        if (ix_nb > ix) | isexternal(tess._trigs[ix_nb])
-            atr, ctr = geta(tr), getc(tr)
-            ΔQ = mod(quadrants[getindex(atr)] - quadrants[getindex(ctr)], 4)
+        if (ix_nb > ix) || isexternal(tess._trigs[ix_nb])
+            ΔQ = mod(quadrants[atri] - quadrants[ctri], 4)
             if ΔQ == 2
                 edge = DelaunayEdge(atr, ctr)
                 push!(E, edge)
@@ -199,9 +201,8 @@ function candidateedges!(
         end
 
         ix_nc = tr._neighbour_c
-        if (ix_nc > ix) | isexternal(tess._trigs[ix_nc])
-            atr, btr = geta(tr), getb(tr)
-            ΔQ = mod(quadrants[getindex(atr)] - quadrants[getindex(btr)], 4)
+        if (ix_nc > ix) || isexternal(tess._trigs[ix_nc])
+            ΔQ = mod(quadrants[atri] - quadrants[btri], 4)
             if ΔQ == 2
                 edge = DelaunayEdge(atr, btr)
                 push!(E, edge)
@@ -447,7 +448,6 @@ next one (after the reference) is picked from the fixed set of nodes.
     return minphi_idx
 end
 
-
 """
     contouredges(tess, edges)
 
@@ -483,7 +483,6 @@ function contouredges(
 
     return C
 end
-
 
 """
     evaluateregions!(C, g2f)
