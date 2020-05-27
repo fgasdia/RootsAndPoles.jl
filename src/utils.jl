@@ -39,3 +39,6 @@ end
 function geom2fcn(edge::DelaunayEdge{P}, ra, rb, ia, ib) where P <: AbstractPoint2D
     return geom2fcn(geta(edge), ra, rb, ia, ib), geom2fcn(getb(edge), ra, rb, ia, ib)
 end
+function geom2fcn(x, y, ra, rb, ia, ib)
+    return complex((x-rb)/ra, (y-ib)/ia)
+end

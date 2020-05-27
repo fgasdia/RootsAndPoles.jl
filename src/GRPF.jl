@@ -92,6 +92,7 @@ struct Geometry2Function{T<:AbstractFloat}
 end
 (f::Geometry2Function)(z) = geom2fcn(z, f.ra, f.rb, f.ia, f.ib)
 (f::Geometry2Function)(x, y) = geom2fcn(x, y, f.ra, f.rb, f.ia, f.ib)
+Base.eltype(f::Geometry2Function{T}) where T = T
 
 """
     ScaledFunction{T<:Function}
@@ -777,6 +778,10 @@ function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, params=GRPFPa
     f = ScaledFunction(fcn, g2f)
 
     tess, E, quadrants = tesselate!(tess, newnodes, f, params)
+
+    complexT = complex(eltype(g2f))
+    isempty(E) && return Vector{complexT}(), Vector{complexT}()
+
     C = contouredges(tess, E)
     regions = evaluateregions!(C, g2f)
     zroots, zpoles = rootsandpoles(regions, quadrants, g2f)
@@ -830,6 +835,10 @@ function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, ::PlotData, p
     f = ScaledFunction(fcn, g2f)
 
     tess, E, quadrants, phasediffs = tesselate!(tess, newnodes, f, params, PlotData())
+
+    complexT = complex(eltype(g2f))
+    isempty(E) && return Vector{complexT}(), Vector{complexT}(), quadrants, phasediffs, tess, g2f
+
     C = contouredges(tess, E)
     regions = evaluateregions!(C, g2f)
     zroots, zpoles = rootsandpoles(regions, quadrants, g2f)

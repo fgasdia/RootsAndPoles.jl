@@ -71,4 +71,30 @@ bzroots, bzpoles = grpf(defaultfcn, origcoords)
 @test approxmatch(bzpoles, zpoles)
 
 # Test region with no roots or poles
-# TODO
+xb, xe = -1, 1
+yb, ye = -2, -1
+origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
+
+nozroots, nozpoles = grpf(defaultfcn, origcoords)
+
+@test length(nozroots) == 0
+@test length(nozpoles) == 0
+
+nozroots, nozpoles, quadrants, phasediffs, tess, g2f = grpf(defaultfcn, origcoords, PlotData())
+
+@test length(nozroots) == 0
+@test length(nozpoles) == 0
+
+xb, xe = big"-1", big"1"
+yb, ye = big"-2", big"-1"
+r = big"0.2"
+
+origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
+
+bnozroots, bnozpoles = grpf(defaultfcn, origcoords)
+
+@test eltype(bnozroots) == Complex{BigFloat}
+@test eltype(bnozpoles) == Complex{BigFloat}
+
+@test length(bnozroots) == 0
+@test length(bnozpoles) == 0
