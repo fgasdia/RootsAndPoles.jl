@@ -248,12 +248,11 @@ function candidateedges!(
 end
 
 """
-    counttrianglenodes(triangle, edge_idxs)
+    zone(triangle, edge_idxs)
 
-Count how many times each triangle of `tess` contains a node with index in
-`edge_idxs`.
+Return zone `1` or `2` for `triangle`.
 """
-function counttrianglenodes(
+function zone(
     triangle::DelaunayTriangle{IndexablePoint2D},
     edge_idxs::Vector{<:Integer}
     )
@@ -266,16 +265,23 @@ function counttrianglenodes(
     nbi = getindex(nb)
     nci = getindex(nc)
 
-    # julia 1.4.1: faster to keep counting than to keep checking if tricount > 1,
-    # which is all we actually care about
-    tricount = 0
+    zone1 = false
+    zone2 = false
     for idx in edge_idxs
         if (nai == idx) | (nbi == idx) | (nci == idx)
-            tricount += 1
+            if ~zone1
+                if ~zone2
+                    zone2 = true
+                else
+                    # zone1 = true
+                    return 1
+                end
+            end
+
         end
     end
 
-    return tricount
+    return zone2 ? 2 : 0
 end
 
 """
@@ -432,11 +438,11 @@ function splittriangles!(
 
     zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
     for triangle in tess
-        tricount = counttrianglenodes(triangle, edge_idxs)
+        z = zone(triangle, edge_idxs)
 
-        if tricount > 1
+        if z == 1
             push!(zone1triangles, triangle)
-        elseif tricount == 1
+        elseif z == 2
             zone2newnode!(newnodes, triangle, params.skinnytriangle)
         end
     end
