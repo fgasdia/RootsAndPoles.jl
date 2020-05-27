@@ -356,41 +356,6 @@ end
 end
 
 """
-    contouredges(tess, edges)
-
-Find contour edges from all candidate edges.
-"""
-function contouredges(
-    tess::DelaunayTessellation2D{IndexablePoint2D},
-    edges::Vector{DelaunayEdge{IndexablePoint2D}}
-    )
-
-    C = Vector{DelaunayEdge{IndexablePoint2D}}()
-    sizehint!(C, length(edges))
-
-    # Edges of triangles that contain at least 1 of `edges`
-    for triangle in tess
-        pa, pb, pc = geta(triangle), getb(triangle), getc(triangle)
-
-        edgea = DelaunayEdge(pa, pb)
-        edgeb = DelaunayEdge(pb, pc)
-        edgec = DelaunayEdge(pc, pa)
-
-        for edge in edges
-            if same(edgea, edge) || same(edgeb, edge) || same(edgec, edge)
-                push!(C, edgea, edgeb, edgec)
-                break  # only count each triangle once
-            end
-        end
-    end
-
-    # Remove duplicate edges
-    sameunique!(C)
-
-    return C
-end
-
-"""
     zone2newnodes!(newnodes, triangle, skinnytriangle)
 
 Add node to `newnodes` for zone 2 ("skinny") triangles.
@@ -481,6 +446,44 @@ next one (after the reference) is picked from the fixed set of nodes.
 
     return minphi_idx
 end
+
+
+"""
+    contouredges(tess, edges)
+
+Find contour edges from all candidate edges.
+"""
+function contouredges(
+    tess::DelaunayTessellation2D{IndexablePoint2D},
+    edges::Vector{DelaunayEdge{IndexablePoint2D}}
+    )
+
+    C = Vector{DelaunayEdge{IndexablePoint2D}}()
+    sizehint!(C, length(edges))
+
+    # Edges of triangles that contain at least 1 of `edges`
+    for triangle in tess
+        pa, pb, pc = geta(triangle), getb(triangle), getc(triangle)
+        pai, pbi, pci = getindex(pa), getindex(pb), getindex(pc)
+
+        for edge in edges
+            eai, ebi = getindex(geta(edge)), getindex(getb(edge))
+
+            if ((eai == pai) && (ebi == pbi)) | ((eai == pbi) && (ebi == pai)) |
+                ((eai == pbi) && (ebi == pci)) | ((eai == pci) && (ebi == pbi)) |
+                ((eai == pci) && (ebi == pai)) | ((eai == pai) && (ebi == pci))
+                push!(C, DelaunayEdge(pa,pb), DelaunayEdge(pb,pc), DelaunayEdge(pc,pa))
+                break  # only count each triangle once
+            end
+        end
+    end
+
+    # Remove duplicate edges
+    sameunique!(C)
+
+    return C
+end
+
 
 """
     evaluateregions!(C, g2f)
@@ -625,7 +628,7 @@ function tesselate!(
         # Determine candidate edges that may be near a root or pole
         empty!(E)  # start with a blank E
         candidateedges!(E, tess, quadrants)
-        isempty(E) && error("No roots or poles found in the domain.")
+        isempty(E) && tess, E, quadrants  # no roots or poles found
 
         # Select candidate edges that are longer than the chosen tolerance
         selectE = filter(e -> longedge(e, params.tolerance, g2f), E)
@@ -685,7 +688,7 @@ function tesselate!(
         # Determine candidate edges that may be near a root or pole
         empty!(E)  # always start with a blank E
         E, phasediffs = candidateedges!(E, tess, quadrants, PlotData())
-        isempty(E) && error("No roots found in the domain")
+        isempty(E) && return tess, E, quadrants, phasediffs  # no roots or poles found
 
         # Select candidate edges that are longer than the chosen tolerance
         selectE = filter(e -> longedge(e, params.tolerance, g2f), E)

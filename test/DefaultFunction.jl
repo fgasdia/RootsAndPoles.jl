@@ -69,3 +69,6 @@ bzroots, bzpoles = grpf(defaultfcn, origcoords)
 
 @test approxmatch(bzroots, zroots)
 @test approxmatch(bzpoles, zpoles)
+
+# Test region with no roots or poles
+# TODO

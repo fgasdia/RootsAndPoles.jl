@@ -56,7 +56,7 @@ Otherwise, return `false`. This is similar to `==`.
 To check if two edges are identical in the sense that no program could
 distinguish them, use `===`.
 """
-function same(e1::DelaunayEdge{IndexablePoint2D},e2::DelaunayEdge{IndexablePoint2D})
+@inline function same(e1::DelaunayEdge{IndexablePoint2D},e2::DelaunayEdge{IndexablePoint2D})
     e1 === e2 && return true
 
     # if they're reversed
