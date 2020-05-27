@@ -28,7 +28,7 @@ function rectangulardomain(Zb::Complex, Ze::Complex, Δr)
     mn = m*n
 
     vlength = mn + div(m, 2)
-    v = Vector{promote_type(typeof(Zb), typeof(Ze), typeof(Δr))}(undef, vlength)
+    v = Vector{promote_type(typeof(Zb), typeof(Ze), typeof(Δr), Float64)}(undef, vlength)
 
     I = LinearIndices((n,m))
     on = false
@@ -75,7 +75,7 @@ function diskdomain(R, Δr)
 
     f₀step = π/(6n)
 
-    newnodes = Vector{complex(promote_type(typeof(R), typeof(Δr)))}(undef, 6*sum(1:n)+1)
+    newnodes = Vector{complex(promote_type(typeof(R), typeof(Δr), Float64))}(undef, 6*sum(1:n)+1)
     newnodes[1] = 0
 
     idx = 2
