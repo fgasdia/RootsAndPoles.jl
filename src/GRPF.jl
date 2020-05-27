@@ -265,19 +265,16 @@ function zone(
     nbi = getindex(nb)
     nci = getindex(nc)
 
-    zone1 = false
     zone2 = false
     for idx in edge_idxs
+        # with Julia 1.4.2: | is faster than || here
         if (nai == idx) | (nbi == idx) | (nci == idx)
-            if ~zone1
-                if ~zone2
-                    zone2 = true
-                else
-                    # zone1 = true
-                    return 1
-                end
+            if !zone2
+                zone2 = true
+            else
+                # zone1 = true
+                return 1
             end
-
         end
     end
 
@@ -452,8 +449,8 @@ end
 """
     findnextnode(prevnode, refnode, tempnodes, g2f)
 
-Find the index of the next node in the candidate region boundary process. The next one (after
-the reference) is picked from the fixed set of nodes.
+Find the index of the next node in the candidate region boundary process. The
+next one (after the reference) is picked from the fixed set of nodes.
 """
 @inline function findnextnode(
     prevnode::IndexablePoint2D,
@@ -626,7 +623,7 @@ function tesselate!(
         numnodes += numnewnodes
 
         # Determine candidate edges that may be near a root or pole
-        empty!(E)  # we always start with a blank E
+        empty!(E)  # start with a blank E
         candidateedges!(E, tess, quadrants)
         isempty(E) && error("No roots or poles found in the domain.")
 
