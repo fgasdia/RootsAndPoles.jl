@@ -1,12 +1,12 @@
 # RootsAndPoles.jl: Global complex Roots and Poles Finding in Julia
 
-[![Build Status](https://travis-ci.com/fgasdia/GRPF.jl.svg?branch=master)](https://travis-ci.com/fgasdia/GRPF.jl) [![Build status](https://ci.appveyor.com/api/projects/status/megpgn8l1ej5m3ww?svg=true)](https://ci.appveyor.com/project/fgasdia/grpf-jl) [![DOI](https://zenodo.org/badge/154031378.svg)](https://zenodo.org/badge/latestdoi/154031378)
+[![Build Status](https://travis-ci.com/fgasdia/RootsAndPoles.jl.svg?branch=master)](https://travis-ci.com/fgasdia/RootsAndPoles.jl) [![Build status](https://ci.appveyor.com/api/projects/status/megpgn8l1ej5m3ww?svg=true)](https://ci.appveyor.com/project/fgasdia/rootsandpoles-jl) [![DOI](https://zenodo.org/badge/154031378.svg)](https://zenodo.org/badge/latestdoi/154031378)
 
 A Julia implementation of [GRPF](https://github.com/PioKow/GRPF) by Piotr Kowalczyk.
 
 ## Description
 
-RootsAndPoles.jl attempts to **find all the zeros and poles of a complex valued function
+`RootsAndPoles.jl` attempts to **find all the zeros and poles of a complex valued function
 with complex arguments in a fixed region**. These types of problems are frequently encountered in electromagnetics, but the algorithm can also be used for similar problems in e.g. optics, acoustics, etc.
 
 The GRPF algorithm first samples the function on a triangular mesh through Delaunay triangulation. Candidate regions to search for roots and poles are determined and the discretized [Cauchy's argument principle](https://en.wikipedia.org/wiki/Argument_principle) is applied _without needing the derivative of the function or integration over the contour_. To improve the accuracy of the results, a self-adaptive mesh refinement occurs inside the identified candidate regions.
