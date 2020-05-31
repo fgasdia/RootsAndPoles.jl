@@ -1,10 +1,12 @@
 __precompile__(true)
 
 """
-# GRPF: Global complex Roots and Poles Finding algorithm
+    RootsAndPoles.jl
 
-A Julia implementation of the GRPF algorithm. Matlab code is available under MIT
-license at https://github.com/PioKow/GRPF.
+RootsAndPoles.jl is a Julia implementation of the Global complex Roots and Poles
+Finding (GRPF) algorithm.
+
+Matlab code is available under MIT license at https://github.com/PioKow/GRPF.
 
 # References
 
@@ -13,7 +15,7 @@ analysis for propagation and radiation problems,” IEEE Transactions on Antenna
 and Propagation, vol. 66, no. 12, pp. 7198–7205, Dec. 2018,
 doi: 10.1109/TAP.2018.2869213.
 """
-module GRPF
+module RootsAndPoles
 
 #==
 NOTE: Some variable conversions from the original GRPF papers to this code:
@@ -40,8 +42,8 @@ const MINCOORD = nextfloat(min_coord, 10)
 """
     GRPFParams
 
-Structure for holding values used by `GRPF` to stop iterating or split Delaunay
-triangles.
+Structure for holding values used by `RootsAndPoles.jl` to stop iterating or
+split Delaunay triangles.
 
 `maxiterations` is the maximum number of refinement iterations before `grpf`
 returns. By default, `maxiterations` is 100.

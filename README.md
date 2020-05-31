@@ -1,4 +1,4 @@
-# GRPF.jl: Global complex Roots and Poles Finding in Julia
+# RootsAndPoles.jl: Global complex Roots and Poles Finding in Julia
 
 [![Build Status](https://travis-ci.com/fgasdia/GRPF.jl.svg?branch=master)](https://travis-ci.com/fgasdia/GRPF.jl) [![Build status](https://ci.appveyor.com/api/projects/status/megpgn8l1ej5m3ww?svg=true)](https://ci.appveyor.com/project/fgasdia/grpf-jl) [![DOI](https://zenodo.org/badge/154031378.svg)](https://zenodo.org/badge/latestdoi/154031378)
 
@@ -6,10 +6,10 @@ A Julia implementation of [GRPF](https://github.com/PioKow/GRPF) by Piotr Kowalc
 
 ## Description
 
-GRPF attempts to **find all the zeros and poles of a complex valued function
+RootsAndPoles.jl attempts to **find all the zeros and poles of a complex valued function
 with complex arguments in a fixed region**. These types of problems are frequently encountered in electromagnetics, but the algorithm can also be used for similar problems in e.g. optics, acoustics, etc.
 
-GRPF first samples the function on a triangular mesh through Delaunay triangulation. Candidate regions to search for roots and poles are determined and the discretized [Cauchy's argument principle](https://en.wikipedia.org/wiki/Argument_principle) is applied _without needing the derivative of the function or integration over the contour_. To improve the accuracy of the results, a self-adaptive mesh refinement occurs inside the identified candidate regions.
+The GRPF algorithm first samples the function on a triangular mesh through Delaunay triangulation. Candidate regions to search for roots and poles are determined and the discretized [Cauchy's argument principle](https://en.wikipedia.org/wiki/Argument_principle) is applied _without needing the derivative of the function or integration over the contour_. To improve the accuracy of the results, a self-adaptive mesh refinement occurs inside the identified candidate regions.
 
 ![simplefcn](simplefcn.svg)
 
@@ -18,7 +18,7 @@ GRPF first samples the function on a triangular mesh through Delaunay triangulat
 ### Installation
 
 ```julia
-]add GRPF
+]add RootsAndPoles
 ```
 
 ### Example Problem
@@ -42,7 +42,7 @@ tolerance = 1e-9
 
 This package includes convenience functions for rectangular and disk shaped domains, but any "shape" can be used. `origcoords` below is simply a vector of complex numbers containing the original mesh coordinates which will be Delaunay triangulated. For maximum efficiency, the original mesh nodes should form equilateral triangles.
 ```julia
-using GRPF
+using RootsAndPoles
 
 origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 ```
