@@ -92,7 +92,7 @@ See [test/](test/) for additional examples.
 
 ## Limitations
 
-This package uses [VoronoiDelaunay.jl](https://github.com/JuliaGeometry/VoronoiDelaunay.jl) to perform the Delaunay tesselation. `VoronoiDelaunay` is numerically limited to the range of `1.0+eps(Float64)` to `2.0-2eps(Float64)` for its point coordinates. `GRPF.jl` will accept functions and `origcoords` that aren't limited to `Complex{Float64}`, for example `Complex{BigFloat}`, but the internal tolerance of the root finding is limited to `Float64` precision.
+This package uses [VoronoiDelaunay.jl](https://github.com/JuliaGeometry/VoronoiDelaunay.jl) to perform the Delaunay tesselation. `VoronoiDelaunay` is numerically limited to the range of `1.0+eps(Float64)` to `2.0-2eps(Float64)` for its point coordinates. `RootsAndPoles.jl` will accept functions and `origcoords` that aren't limited to `Complex{Float64}`, for example `Complex{BigFloat}`, but the internal tolerance of the root finding is limited to `Float64` precision.
 
 ## Citing
 
