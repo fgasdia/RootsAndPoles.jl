@@ -218,7 +218,7 @@ function candidateedges!(
 end
 
 """
-    candidateedges!(E, tess, quadrants, ::PlotData)
+    candidateedges!(phasediffs, E, tess, quadrants, ::PlotData)
 
 Return candidate edges `E` and the `phasediffs` across each edge.
 """
@@ -229,7 +229,6 @@ function candidateedges!(
     ::PlotData
     )
 
-    # TODO: reuse phasediffs
     phasediffs = Vector{Int8}()
 
     for edge in delaunayedges_fast(tess)
@@ -289,13 +288,12 @@ function zone(
 end
 
 """
-    uniqueindices(edges)
+    uniqueindices!(idxs, edges)
 
 Return unique indices of all nodes in `edges`.
 """
-@inline function uniqueindices(edges::Vector{DelaunayEdge{IndexablePoint2D}})
-    # TODO: reuse idxs
-    idxs = Vector{Int}()
+@inline function uniqueindices!(idxs::Vector{<:Integer}, edges::Vector{DelaunayEdge{IndexablePoint2D}})
+    empty!(idxs)
     for i in eachindex(edges)
         @inbounds ei = edges[i]
         push!(idxs, getindex(geta(ei)))
@@ -303,7 +301,7 @@ Return unique indices of all nodes in `edges`.
     end
     sort!(idxs)  # calling `sort!` first makes `unique!` more efficient
     unique!(idxs)
-    return idxs
+    return nothing
 end
 
 """
@@ -396,18 +394,18 @@ end
 """
     splittriangles!(newnodes, tess, edge_idxs, params)
 
-Add zone 2 triangles to `newnodes` and then return a vector of zone 1 triangles,
+Add zone 2 triangles to `newnodes` and then update vector of zone 1 triangles,
 which require special handling.
 """
 function splittriangles!(
+    zone1triangles::Vector{DelaunayTriangle{IndexablePoint2D}},
     newnodes::AbstractVector,
     tess::DelaunayTessellation2D{IndexablePoint2D},
     edge_idxs::Vector{<:Integer},
     params::GRPFParams
     )
 
-    # TODO: reuse zone1triangles?
-    zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
+    empty!(zone1triangles)
     for triangle in tess
         z = zone(triangle, edge_idxs)
 
@@ -417,7 +415,7 @@ function splittriangles!(
             zone2newnode!(newnodes, triangle, params.skinnytriangle)
         end
     end
-    return zone1triangles
+    return nothing
 end
 
 """
@@ -466,7 +464,6 @@ function contouredges(
     edges::Vector{DelaunayEdge{IndexablePoint2D}}
     )
 
-    # TODO: reuse C?
     C = Vector{DelaunayEdge{IndexablePoint2D}}()
     sizehint!(C, length(edges))
 
@@ -507,13 +504,11 @@ function evaluateregions!(
     # Initialize
     numregions = 1
 
-    # TODO: reuse regions?
     regions = [[geta(C[1])]]
 
     refnode = getb(C[1])  # type annotated to assist with boxing
     popfirst!(C)
 
-    # TODO: Reuse nextedgeidxs?
     nextedgeidxs = Vector{Int}()
     while length(C) > 0
 
@@ -619,10 +614,10 @@ function tesselate!(
 
     g2f = f.g2f
 
-    # TODO: Reuse E?
-    # TODO: reuse quadrants?
     E = Vector{DelaunayEdge{IndexablePoint2D}}()
     quadrants = Vector{Int8}()
+    edge_idxs = Vector{Int}()
+    zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
 
     iteration = 0
     while (iteration < params.maxiterations) && (numnodes < params.maxnodes)
@@ -651,11 +646,11 @@ function tesselate!(
         maxElength < params.tolerance && return tess, E, quadrants
 
         # Get unique indices of nodes in `edges`
-        edge_idxs = uniqueindices(selectE)
+        uniqueindices!(edge_idxs, selectE)
 
         # Refine (split) triangles
         empty!(newnodes)
-        zone1triangles = splittriangles!(newnodes, tess, edge_idxs, params)
+        splittriangles!(zone1triangles, newnodes, tess, edge_idxs, params)
 
         # Add new nodes in zone 1
         zone1newnodes!(newnodes, zone1triangles, g2f, params.tolerance)
@@ -681,10 +676,10 @@ function tesselate!(
 
     g2f = f.g2f
 
-    # TODO: Reuse E?
-    # TODO: Reuse quadrants?
     E = Vector{DelaunayEdge{IndexablePoint2D}}()
     quadrants = Vector{Int8}()
+    edge_idxs = Vector{Int}()
+    zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
 
     iteration = 0
     while (iteration < params.maxiterations) && (numnodes < params.maxnodes)
@@ -713,11 +708,11 @@ function tesselate!(
         maxElength < params.tolerance && return tess, E, quadrants, phasediffs
 
         # Get unique indices of nodes in `edges`
-        edge_idxs = uniqueindices(selectE)
+        uniqueindices!(edge_idxs, selectE)
 
         # Refine (split) triangles
         empty!(newnodes)
-        zone1triangles = splittriangles!(newnodes, tess, edge_idxs, params)
+        splittriangles!(zone1triangles, newnodes, tess, edge_idxs, params)
 
         # Add new nodes in zone 1
         zone1newnodes!(newnodes, zone1triangles, g2f, params.tolerance)
