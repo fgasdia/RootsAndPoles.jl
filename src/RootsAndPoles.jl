@@ -28,6 +28,7 @@ NOTE: Some variable conversions from the original GRPF papers to this code:
 ==#
 
 import Base
+import Base.Threads.@threads
 using LinearAlgebra
 using VoronoiDelaunay
 import VoronoiDelaunay: getx, gety, DelaunayEdge, DelaunayTriangle
@@ -150,7 +151,7 @@ index.
     nodes::Vector{IndexablePoint2D},
     f::ScaledFunction{T}) where T
 
-    for ii in eachindex(nodes)
+    @threads for ii in eachindex(nodes)
         p = @inbounds nodes[ii]
         quadrants[getindex(p)] = quadrant(f(p))
     end
@@ -228,6 +229,7 @@ function candidateedges!(
     ::PlotData
     )
 
+    # TODO: reuse phasediffs
     phasediffs = Vector{Int8}()
 
     for edge in delaunayedges_fast(tess)
@@ -236,9 +238,9 @@ function candidateedges!(
 
         # NOTE: To match Matlab, force `idxa` < `idxb`
         # (order doesn't matter for `ΔQ == 2`, which is the only case we care about)
-        if idxa > idxb
-            idxa, idxb = idxb, idxa
-        end
+        # if idxa > idxb
+        #     idxa, idxb = idxb, idxa
+        # end
 
         @inbounds ΔQ = mod(quadrants[idxa] - quadrants[idxb], Int8(4))  # phase difference
         if ΔQ == 2
@@ -274,6 +276,7 @@ function zone(
         # with Julia 1.4.2: | is faster than || here
         if (nai == idx) | (nbi == idx) | (nci == idx)
             if !zone2
+                # we need to keep searching b/c it might be zone 1
                 zone2 = true
             else
                 # zone1 = true
@@ -291,6 +294,7 @@ end
 Return unique indices of all nodes in `edges`.
 """
 @inline function uniqueindices(edges::Vector{DelaunayEdge{IndexablePoint2D}})
+    # TODO: reuse idxs
     idxs = Vector{Int}()
     for i in eachindex(edges)
         @inbounds ei = edges[i]
@@ -402,6 +406,7 @@ function splittriangles!(
     params::GRPFParams
     )
 
+    # TODO: reuse zone1triangles?
     zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
     for triangle in tess
         z = zone(triangle, edge_idxs)
@@ -461,6 +466,7 @@ function contouredges(
     edges::Vector{DelaunayEdge{IndexablePoint2D}}
     )
 
+    # TODO: reuse C?
     C = Vector{DelaunayEdge{IndexablePoint2D}}()
     sizehint!(C, length(edges))
 
@@ -501,11 +507,13 @@ function evaluateregions!(
     # Initialize
     numregions = 1
 
+    # TODO: reuse regions?
     regions = [[geta(C[1])]]
 
     refnode = getb(C[1])  # type annotated to assist with boxing
     popfirst!(C)
 
+    # TODO: Reuse nextedgeidxs?
     nextedgeidxs = Vector{Int}()
     while length(C) > 0
 
@@ -611,6 +619,8 @@ function tesselate!(
 
     g2f = f.g2f
 
+    # TODO: Reuse E?
+    # TODO: reuse quadrants?
     E = Vector{DelaunayEdge{IndexablePoint2D}}()
     quadrants = Vector{Int8}()
 
@@ -644,7 +654,7 @@ function tesselate!(
         edge_idxs = uniqueindices(selectE)
 
         # Refine (split) triangles
-        newnodes = Vector{IndexablePoint2D}()
+        empty!(newnodes)
         zone1triangles = splittriangles!(newnodes, tess, edge_idxs, params)
 
         # Add new nodes in zone 1
@@ -671,6 +681,8 @@ function tesselate!(
 
     g2f = f.g2f
 
+    # TODO: Reuse E?
+    # TODO: Reuse quadrants?
     E = Vector{DelaunayEdge{IndexablePoint2D}}()
     quadrants = Vector{Int8}()
 
@@ -704,7 +716,7 @@ function tesselate!(
         edge_idxs = uniqueindices(selectE)
 
         # Refine (split) triangles
-        newnodes = Vector{IndexablePoint2D}()
+        empty!(newnodes)
         zone1triangles = splittriangles!(newnodes, tess, edge_idxs, params)
 
         # Add new nodes in zone 1
