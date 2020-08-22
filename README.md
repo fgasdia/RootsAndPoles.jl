@@ -71,19 +71,19 @@ Additional parameters which can be controlled are `maxiterations`, `maxnodes`, a
 
 These can be specified along with the `tess_sizehint` and `tolerance` as, e.g.
 ```julia
-zroots, zpoles = grpf(simplefcn, origcoords, tolerance, GRPFParams(100, 500000, 3, 5000, 1e-9))
+zroots, zpoles = grpf(simplefcn, origcoords, GRPFParams(100, 500000, 3, 5000, 1e-9))
 ```
 
 ### Plot data
 
 If mesh node `quadrants` and `phasediffs` are wanted for plotting, simply pass a `PlotData()` instance.
 ```julia
-zroots, zpoles, quadrants, phasediffs = grpf(graphenefunction, origcoords, PlotData())
+zroots, zpoles, quadrants, phasediffs = grpf(simplefcn, origcoords, PlotData())
 ```
 
 A `GRPFParams` can also be passed.
 ```julia
-zroots, zpoles, quadrants, phasediffs = grpf(graphenefunction, origcoords, PlotData(), GRPFParams(5000, 1e-9))
+zroots, zpoles, quadrants, phasediffs = grpf(simplefcn, origcoords, PlotData(), GRPFParams(5000, 1e-9))
 ```
 
 ### Additional examples
