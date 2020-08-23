@@ -52,10 +52,6 @@ Roots and poles can be obtained with the `grpf` function. We only need to pass t
 zroots, zpoles = grpf(simplefcn, origcoords)
 ```
 
-### Multithreading
-
-Beginning version 1.1.0, calls to the provided function, e.g. `simplefcn`, will be multithreaded using Julia's `@threads` capability. The function is called at every node of the triangulation and the results are all independent of one another. For fast-running functions like `simplefcn`, the overall runtime of `grpf` is dominated by the Delaunay Triangulation itself, but for more complicated functions, threading can provide a significant advantage.
-
 ### Additional parameters
 
 Additional parameters can be provided to the tesselation and GRPF algorithms by explicitly passing a `GRPFParams` struct.
@@ -93,6 +89,10 @@ zroots, zpoles, quadrants, phasediffs = grpf(simplefcn, origcoords, PlotData(), 
 ### Additional examples
 
 See [test/](test/) for additional examples.
+
+## Multithreading
+
+Beginning version 1.1.0, calls to the provided function, e.g. `simplefcn`, will be multithreaded using Julia's `@threads` capability. The function is called at every node of the triangulation and the results are independent of one another. For fast-running functions like `simplefcn`, the overall runtime of `grpf` is dominated by the Delaunay Triangulation itself, but for more complicated functions, threading can provide a significant advantage.
 
 ## Limitations
 
