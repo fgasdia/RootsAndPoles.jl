@@ -63,15 +63,21 @@ By default, the value of `tess_sizehint` is 5000 and the `tolerance` is 1e-9, bu
 zroots, zpoles = grpf(simplefcn, origcoords, GRPFParams(5000, 1e-9))
 ```
 
+Beginning version 1.1.0, calls to the provided function, e.g. `simplefcn`, can be **multithreaded** using Julia's `@threads` capability. The function is called at every node of the triangulation and the results should be independent of one another. For fast-running functions like `simplefcn`, the overall runtime of `grpf` is dominated by the Delaunay Triangulation itself, but for more complicated functions, threading can provide a significant advantage. To enable multithreading of the function calls, specify so as a `GRPFParams` argument
+```julia
+zroots, zpoles = grpf(simplefcn, origcoords, GRPFParams(5000, 1e-9, true))
+```
+By default, `multithreading = false`.
+
 Additional parameters which can be controlled are `maxiterations`, `maxnodes`, and `skinnytriangle`. `maxiterations` sets the maximum number of mesh refinement iterations and `maxnodes` sets the maximum number of nodes allowed in the `DelaunayTessellation2D` before returning. `skinnytriangle` is the maximum allowed ratio of the longest to shortest side length in a tesselation triangle before the triangle is automatically subdivided in the mesh refinement step. Default values are
 
   - `maxiterations`: 100
   - `maxnodes`: 500000
   - `skinnytriangle`: 3
 
-These can be specified along with the `tess_sizehint` and `tolerance` as, e.g.
+These can be specified along with the `tess_sizehint`, `tolerance` and `multithreading` as, e.g.
 ```julia
-zroots, zpoles = grpf(simplefcn, origcoords, GRPFParams(100, 500000, 3, 5000, 1e-9))
+zroots, zpoles = grpf(simplefcn, origcoords, GRPFParams(100, 500000, 3, 5000, 1e-9, true))
 ```
 
 ### Plot data
@@ -89,10 +95,6 @@ zroots, zpoles, quadrants, phasediffs = grpf(simplefcn, origcoords, PlotData(), 
 ### Additional examples
 
 See [test/](test/) for additional examples.
-
-## Multithreading
-
-Beginning version 1.1.0, calls to the provided function, e.g. `simplefcn`, will be multithreaded using Julia's `@threads` capability. The function is called at every node of the triangulation and the results are independent of one another. For fast-running functions like `simplefcn`, the overall runtime of `grpf` is dominated by the Delaunay Triangulation itself, but for more complicated functions, threading can provide a significant advantage.
 
 ## Limitations
 

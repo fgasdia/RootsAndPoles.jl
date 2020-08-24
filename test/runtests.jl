@@ -26,6 +26,12 @@ function approxmatch(A::AbstractArray, B::AbstractArray)
 end
 
 @testset "RootsAndPoles" begin
+    @testset "GRPFParams" begin
+        @test GRPFParams() === GRPFParams(100, 500000, 3, 5000, 1e-9, false)
+        @test GRPFParams(5000, 1e-3) === GRPFParams(100, 500000, 3, 5000, 1e-3, false)
+        @test GRPFParams(5000, 1e-3, true) === GRPFParams(100, 500000, 3, 5000, 1e-3, true)
+    end
+
     @time @testset "Simple Rational Function" begin include("SimpleRationalFunction.jl") end
     @time @testset "Complex Modes" begin include("ComplexModes.jl") end
     @time @testset "Lossy Multilayered Waveguide" begin include("LossyMultilayeredWaveguide.jl") end

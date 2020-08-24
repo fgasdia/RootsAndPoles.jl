@@ -68,6 +68,7 @@ struct GRPFParams{T<:Real}
     skinnytriangle::Int
     tess_sizehint::Int
     tolerance::T
+    multithreading::Bool
 end
 
 """
@@ -76,8 +77,8 @@ end
 Convenience function for creating a `GRPFParams` object with the most
 important parameters, `tess_sizehint` and `tolerance`.
 """
-GRPFParams(tess_sizehint::Integer, tolerance::Real) = GRPFParams(100, 500000, 3, tess_sizehint, tolerance)
-GRPFParams() = GRPFParams(100, 500000, 3, 5000, 1e-9)
+GRPFParams(tess_sizehint::Integer, tolerance::Real, multithreading::Bool=false) = GRPFParams(100, 500000, 3, tess_sizehint, tolerance, multithreading)
+GRPFParams() = GRPFParams(100, 500000, 3, 5000, 1e-9, false)
 
 struct PlotData end
 
@@ -149,11 +150,19 @@ index.
 @inline function assignquadrants!(
     quadrants::Vector{<:Integer},
     nodes::Vector{IndexablePoint2D},
-    f::ScaledFunction{T}) where T
+    f::ScaledFunction{T},
+    multithreading=false) where T
 
-    @threads for ii in collect(eachindex(nodes))
-        p = @inbounds nodes[ii]
-        quadrants[getindex(p)] = quadrant(f(p))
+    if multithreading
+        @threads for ii in eachindex(nodes)
+            p = @inbounds nodes[ii]
+            quadrants[getindex(p)] = quadrant(f(p))
+        end
+    else
+        for ii in eachindex(nodes)
+            p = @inbounds nodes[ii]
+            quadrants[getindex(p)] = quadrant(f(p))
+        end
     end
     return nothing
 end
@@ -626,7 +635,7 @@ function tesselate!(
         # Determine which quadrant function value belongs at each node
         numnewnodes = length(newnodes)
         append!(quadrants, Vector{Int8}(undef, numnewnodes))
-        assignquadrants!(quadrants, newnodes, f)
+        assignquadrants!(quadrants, newnodes, f, params.multithreading)
 
         # Add new nodes to `tess`
         push!(tess, newnodes)
@@ -688,7 +697,7 @@ function tesselate!(
         # Determine which quadrant function value belongs at each node
         numnewnodes = length(newnodes)
         append!(quadrants, Vector{Int8}(undef, numnewnodes))
-        assignquadrants!(quadrants, newnodes, f)
+        assignquadrants!(quadrants, newnodes, f, params.multithreading)
 
         # Add new nodes to `tess`
         push!(tess, newnodes)
