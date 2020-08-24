@@ -151,7 +151,7 @@ index.
     nodes::Vector{IndexablePoint2D},
     f::ScaledFunction{T}) where T
 
-    @threads for ii in eachindex(nodes)
+    @threads for ii in collect(eachindex(nodes))
         p = @inbounds nodes[ii]
         quadrants[getindex(p)] = quadrant(f(p))
     end
