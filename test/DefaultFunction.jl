@@ -53,6 +53,11 @@ tmpr, tmpp = grpf(defaultfcn, origcoords, PlotData(), GRPFParams(8000, 1e-9))
 @test approxmatch(tmpr, zroots)
 @test approxmatch(tmpp, zpoles)
 
+tmpr, tmpp = grpf(defaultfcn, origcoords, GRPFParams(8000, 1e-9, true))
+
+@test approxmatch(tmpr, zroots)
+@test approxmatch(tmpp, zpoles)
+
 # Test with big origcoords
 xb = big"-2"  # real part begin
 xe = big"2"  # real part end

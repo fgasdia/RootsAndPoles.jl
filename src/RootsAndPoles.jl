@@ -28,6 +28,7 @@ NOTE: Some variable conversions from the original GRPF papers to this code:
 ==#
 
 import Base
+import Base.Threads.@threads
 using LinearAlgebra
 using VoronoiDelaunay
 import VoronoiDelaunay: getx, gety, DelaunayEdge, DelaunayTriangle
@@ -67,6 +68,7 @@ struct GRPFParams{T<:Real}
     skinnytriangle::Int
     tess_sizehint::Int
     tolerance::T
+    multithreading::Bool
 end
 
 """
@@ -75,8 +77,8 @@ end
 Convenience function for creating a `GRPFParams` object with the most
 important parameters, `tess_sizehint` and `tolerance`.
 """
-GRPFParams(tess_sizehint::Integer, tolerance::Real) = GRPFParams(100, 500000, 3, tess_sizehint, tolerance)
-GRPFParams() = GRPFParams(100, 500000, 3, 5000, 1e-9)
+GRPFParams(tess_sizehint::Integer, tolerance::Real, multithreading::Bool=false) = GRPFParams(100, 500000, 3, tess_sizehint, tolerance, multithreading)
+GRPFParams() = GRPFParams(100, 500000, 3, 5000, 1e-9, false)
 
 struct PlotData end
 
@@ -148,11 +150,19 @@ index.
 @inline function assignquadrants!(
     quadrants::Vector{<:Integer},
     nodes::Vector{IndexablePoint2D},
-    f::ScaledFunction{T}) where T
+    f::ScaledFunction{T},
+    multithreading=false) where T
 
-    for ii in eachindex(nodes)
-        p = @inbounds nodes[ii]
-        quadrants[getindex(p)] = quadrant(f(p))
+    if multithreading
+        @threads for ii in eachindex(nodes)
+            p = @inbounds nodes[ii]
+            quadrants[getindex(p)] = quadrant(f(p))
+        end
+    else
+        for ii in eachindex(nodes)
+            p = @inbounds nodes[ii]
+            quadrants[getindex(p)] = quadrant(f(p))
+        end
     end
     return nothing
 end
@@ -217,7 +227,7 @@ function candidateedges!(
 end
 
 """
-    candidateedges!(E, tess, quadrants, ::PlotData)
+    candidateedges!(phasediffs, E, tess, quadrants, ::PlotData)
 
 Return candidate edges `E` and the `phasediffs` across each edge.
 """
@@ -236,9 +246,9 @@ function candidateedges!(
 
         # NOTE: To match Matlab, force `idxa` < `idxb`
         # (order doesn't matter for `ΔQ == 2`, which is the only case we care about)
-        if idxa > idxb
-            idxa, idxb = idxb, idxa
-        end
+        # if idxa > idxb
+        #     idxa, idxb = idxb, idxa
+        # end
 
         @inbounds ΔQ = mod(quadrants[idxa] - quadrants[idxb], Int8(4))  # phase difference
         if ΔQ == 2
@@ -274,6 +284,7 @@ function zone(
         # with Julia 1.4.2: | is faster than || here
         if (nai == idx) | (nbi == idx) | (nci == idx)
             if !zone2
+                # we need to keep searching b/c it might be zone 1
                 zone2 = true
             else
                 # zone1 = true
@@ -286,12 +297,12 @@ function zone(
 end
 
 """
-    uniqueindices(edges)
+    uniqueindices!(idxs, edges)
 
 Return unique indices of all nodes in `edges`.
 """
-@inline function uniqueindices(edges::Vector{DelaunayEdge{IndexablePoint2D}})
-    idxs = Vector{Int}()
+@inline function uniqueindices!(idxs::Vector{<:Integer}, edges::Vector{DelaunayEdge{IndexablePoint2D}})
+    empty!(idxs)
     for i in eachindex(edges)
         @inbounds ei = edges[i]
         push!(idxs, getindex(geta(ei)))
@@ -299,7 +310,7 @@ Return unique indices of all nodes in `edges`.
     end
     sort!(idxs)  # calling `sort!` first makes `unique!` more efficient
     unique!(idxs)
-    return idxs
+    return nothing
 end
 
 """
@@ -392,17 +403,18 @@ end
 """
     splittriangles!(newnodes, tess, edge_idxs, params)
 
-Add zone 2 triangles to `newnodes` and then return a vector of zone 1 triangles,
+Add zone 2 triangles to `newnodes` and then update vector of zone 1 triangles,
 which require special handling.
 """
 function splittriangles!(
+    zone1triangles::Vector{DelaunayTriangle{IndexablePoint2D}},
     newnodes::AbstractVector,
     tess::DelaunayTessellation2D{IndexablePoint2D},
     edge_idxs::Vector{<:Integer},
     params::GRPFParams
     )
 
-    zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
+    empty!(zone1triangles)
     for triangle in tess
         z = zone(triangle, edge_idxs)
 
@@ -412,7 +424,7 @@ function splittriangles!(
             zone2newnode!(newnodes, triangle, params.skinnytriangle)
         end
     end
-    return zone1triangles
+    return nothing
 end
 
 """
@@ -613,6 +625,8 @@ function tesselate!(
 
     E = Vector{DelaunayEdge{IndexablePoint2D}}()
     quadrants = Vector{Int8}()
+    edge_idxs = Vector{Int}()
+    zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
 
     iteration = 0
     while (iteration < params.maxiterations) && (numnodes < params.maxnodes)
@@ -621,7 +635,7 @@ function tesselate!(
         # Determine which quadrant function value belongs at each node
         numnewnodes = length(newnodes)
         append!(quadrants, Vector{Int8}(undef, numnewnodes))
-        assignquadrants!(quadrants, newnodes, f)
+        assignquadrants!(quadrants, newnodes, f, params.multithreading)
 
         # Add new nodes to `tess`
         push!(tess, newnodes)
@@ -641,11 +655,11 @@ function tesselate!(
         maxElength < params.tolerance && return tess, E, quadrants
 
         # Get unique indices of nodes in `edges`
-        edge_idxs = uniqueindices(selectE)
+        uniqueindices!(edge_idxs, selectE)
 
         # Refine (split) triangles
-        newnodes = Vector{IndexablePoint2D}()
-        zone1triangles = splittriangles!(newnodes, tess, edge_idxs, params)
+        empty!(newnodes)
+        splittriangles!(zone1triangles, newnodes, tess, edge_idxs, params)
 
         # Add new nodes in zone 1
         zone1newnodes!(newnodes, zone1triangles, g2f, params.tolerance)
@@ -673,6 +687,8 @@ function tesselate!(
 
     E = Vector{DelaunayEdge{IndexablePoint2D}}()
     quadrants = Vector{Int8}()
+    edge_idxs = Vector{Int}()
+    zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
 
     iteration = 0
     while (iteration < params.maxiterations) && (numnodes < params.maxnodes)
@@ -681,7 +697,7 @@ function tesselate!(
         # Determine which quadrant function value belongs at each node
         numnewnodes = length(newnodes)
         append!(quadrants, Vector{Int8}(undef, numnewnodes))
-        assignquadrants!(quadrants, newnodes, f)
+        assignquadrants!(quadrants, newnodes, f, params.multithreading)
 
         # Add new nodes to `tess`
         push!(tess, newnodes)
@@ -701,11 +717,11 @@ function tesselate!(
         maxElength < params.tolerance && return tess, E, quadrants, phasediffs
 
         # Get unique indices of nodes in `edges`
-        edge_idxs = uniqueindices(selectE)
+        uniqueindices!(edge_idxs, selectE)
 
         # Refine (split) triangles
-        newnodes = Vector{IndexablePoint2D}()
-        zone1triangles = splittriangles!(newnodes, tess, edge_idxs, params)
+        empty!(newnodes)
+        splittriangles!(zone1triangles, newnodes, tess, edge_idxs, params)
 
         # Add new nodes in zone 1
         zone1newnodes!(newnodes, zone1triangles, g2f, params.tolerance)
