@@ -10,7 +10,6 @@ function rectangulardomain(Zb::Complex, Ze::Complex, Δr)
     rZb, iZb = reim(Zb)
     rZe, iZe = reim(Ze)
 
-    # TODO: Just redefine Zb and Ze...
     rZb > rZe && throw(ArgumentError("real part of Zb greater than Ze"))
     iZb > iZe && throw(ArgumentError("imag part of Zb greater than Ze"))
 
@@ -27,33 +26,27 @@ function rectangulardomain(Zb::Complex, Ze::Complex, Δr)
     # precalculate
     mn = m*n
 
-    vlength = mn + div(m, 2)
-    v = Vector{promote_type(typeof(Zb), typeof(Ze), typeof(Δr), Float64)}(undef, vlength)
+    vlength = mn
+    T = promote_type(typeof(Zb), typeof(Ze), typeof(Δr), Float64)
+    v = Vector{T}()
+    sizehint!(v, vlength)
 
-    I = LinearIndices((n,m))
     on = false
-    @inbounds for j in 0:m-1, i in 0:n-1
-        # dx/j and dy/i flipped from what would seem "natural" to match Matlab meshgrid
+    @inbounds for j = 0:m-1, i = 0:n-1
         x = rZb + dx*j
         y = iZb + dy*i
 
-        # `n` zeros then `n-1` ones and one zero, then repeat: `n` zeros, etc
-        if (i+1) % n == 0
+        if (i+1) == n
             on = !on
-        elseif on && ((i+1) % n != 0)
+        end
+        if on
             y += half_dy
         end
-        v[I[i+1,j+1]] = complex(x, y)
-    end
 
-    idx = mn
-    @inbounds for i in 1:2:(m-1)
-        idx += 1
-
-        # The "extra" rows or columns still cover the whole range from `Zb` to `Ze`
-        tx = rZb + dx*i
-        ty = iZb
-        v[idx] = complex(tx, ty)
+        if y < iZe || (abs(y - iZe) < sqrt(eps(real(T))))
+            # Can't just check y <= iZe because of floating point limitations
+            push!(v, complex(x, y))
+        end
     end
 
     return v
@@ -84,6 +77,7 @@ function triangulardomain(Za::Complex, Zb::Complex, Zc::Complex, Δr)
     rZb, iZb = reim(Zb)
     rZc, iZc = reim(Zc)
 
+    #==
     # Check if this is a right triangle
     validtriangle = true
     if rZa == rZb == rZc
@@ -103,6 +97,7 @@ function triangulardomain(Za::Complex, Zb::Complex, Zc::Complex, Δr)
 
     iZa == iZb || ((Zb, Zc) = (Zc, Zb))
     rZb > rZa || ((Za, Zb) = (Zb, Za))
+    ==#
 
     # Determine `dx` and `dy`
     X = rZb - rZa
@@ -147,18 +142,6 @@ function triangulardomain(Za::Complex, Zb::Complex, Zc::Complex, Δr)
 end
 
 
-Za = complex(50, -0.1)
-Zb = complex(85, -0.1)
-Zc = complex(50, -6.0)
-r = 0.5
-
-v = triangulardomain(Za, Zb, Zc, r)
-
-plot(real(v),imag(v),"o")
-xlim(50,85)
-ylim(-6,0)
-
-
 """
     diskdomain(R, Δr)
 
@@ -175,7 +158,8 @@ function diskdomain(R, Δr)
 
     f₀step = π/(6n)
 
-    newnodes = Vector{complex(promote_type(typeof(R), typeof(Δr), Float64))}(undef, 6*sum(1:n)+1)
+    T = promote_type(typeof(R), typeof(Δr), Float64)
+    newnodes = Vector{complex(T)}(undef, 6*sum(1:n)+1)
     newnodes[1] = 0
 
     idx = 2
