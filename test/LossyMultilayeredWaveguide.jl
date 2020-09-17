@@ -45,7 +45,7 @@ zroots, zpoles = grpf(wvgd, origcoords)
 @test approxmatch(zroots, matlab_zroots)
 @test approxmatch(zpoles, matlab_zpoles)
 
-pzroots, pzpoles, quadrants, phasediffs, tess = grpf(wvgd, origcoords, PlotData())
+pzroots, pzpoles, quadrants, phasediffs, tess, g2f = grpf(wvgd, origcoords, PlotData())
 
 @test approxmatch(pzroots, matlab_zroots)
 @test approxmatch(pzpoles, matlab_zpoles)

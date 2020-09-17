@@ -12,10 +12,10 @@ VoronoiDelaunay = "0.4.0"
 julia = "1.4"
 
 [extras]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 
 [targets]
-test = ["SpecialFunctions", "Test"]
 benchmark = ["BenchmarkTools", "LinearAlgebra"]
+test = ["SpecialFunctions", "Test"]

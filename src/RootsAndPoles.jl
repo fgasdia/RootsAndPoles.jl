@@ -85,8 +85,14 @@ struct PlotData end
 """
     Geometry2Function
 
-Store conversion coefficients from the `VoronoiDelaunay` domain to the `origcoords`
-domain.
+Store conversion coefficients from the `VoronoiDelaunay.jl` domain to the `origcoords`
+function domain.
+
+Geometry2Function objects can be called as a function, e.g.
+`z_functiondomain = g2f(z_voronoidelaunay)`.
+
+Geometry2Function structs are created internally to `RootsAndPoles.jl` with the appropriate
+scaling parameters but are returned when `grpf` is called with the `PlotData()` argument.
 """
 struct Geometry2Function{T<:AbstractFloat}
     ra::T
@@ -810,8 +816,11 @@ end
 """
     grpf(fcn, origcoords, ::PlotData, params=GRPFParams())
 
-Variant of `grpf` that returns `quadrants` and `phasediffs` in addition to
-`zroots` and `zpoles`, primarily for plotting or diagnostics.
+Variant of `grpf` that returns `quadrants`, `phasediffs`, the VoronoiDelauany.jl tesselation
+`tess`, and the Geometry2Function struct `g2f` for converting from the VoronoiDelaunay.jl to
+function space, in addition to `zroots` and `zpoles`.
+
+These additional outputs are primarily for plotting or diagnostics.
 
 # Examples
 ```jldoctest
@@ -825,7 +834,7 @@ julia> r = 0.1
 
 julia> origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 
-julia> roots, poles, quadrants, phasediffs = grpf(simplefcn, origcoords, PlotData());
+julia> roots, poles, quadrants, phasediffs, tess, g2f = grpf(simplefcn, origcoords, PlotData());
 ```
 """
 function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, ::PlotData, params=GRPFParams())

@@ -38,7 +38,7 @@ zroots, zpoles = grpf(defaultfcn, origcoords)
 @test approxmatch(zroots, matlab_zroots)
 @test approxmatch(zpoles, matlab_zpoles)
 
-pzroots, pzpoles, quadrants, phasediffs, tess = grpf(defaultfcn, origcoords, PlotData())
+pzroots, pzpoles, quadrants, phasediffs, tess, g2f = grpf(defaultfcn, origcoords, PlotData())
 
 @test approxmatch(pzroots, matlab_zroots)
 @test approxmatch(pzpoles, matlab_zpoles)
@@ -48,7 +48,7 @@ tmpr, tmpp = grpf(defaultfcn, origcoords, GRPFParams(8000, 1e-9))
 @test approxmatch(tmpr, zroots)
 @test approxmatch(tmpp, zpoles)
 
-tmpr, tmpp = grpf(defaultfcn, origcoords, PlotData(), GRPFParams(8000, 1e-9))
+tmpr, tmpp, quadrants, phasediffs, tess, g2f = grpf(defaultfcn, origcoords, PlotData(), GRPFParams(8000, 1e-9))
 
 @test approxmatch(tmpr, zroots)
 @test approxmatch(tmpp, zpoles)

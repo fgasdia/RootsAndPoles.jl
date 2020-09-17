@@ -74,7 +74,7 @@ zroots, zpoles = grpf(complexmodes, origcoords)
 @test approxmatch(zroots, matlab_zroots)
 @test approxmatch(zpoles, matlab_zpoles)
 
-pzroots, pzpoles, quadrants, phasediffs, tess = grpf(complexmodes, origcoords, PlotData())
+pzroots, pzpoles, quadrants, phasediffs, tess, g2f = grpf(complexmodes, origcoords, PlotData())
 
 @test approxmatch(pzroots, matlab_zroots)
 @test approxmatch(pzpoles, matlab_zpoles)
