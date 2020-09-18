@@ -69,6 +69,12 @@ struct GRPFParams{T<:Real}
     tess_sizehint::Int
     tolerance::T
     multithreading::Bool
+
+    function GRPFParams{T}(maxiterations, maxnodes, skinnytriangle, tess_sizehint,
+            tolerance, multithreading) where {T<:Real}
+        tess_sizehint > maxnodes && @warn "GRPFParams `tess_sizehint` is greater than `maxnodes`"
+        new(maxiterations, maxnodes, skinnytriangle, tess_sizehint, tolerance, multithreading)
+    end
 end
 
 """
@@ -77,6 +83,9 @@ end
 Convenience function for creating a `GRPFParams` object with the most
 important parameters, `tess_sizehint` and `tolerance`.
 """
+GRPFParams(maxiterations, maxnodes, skinnytriangle, tess_sizehint, tolerance::T,
+    multithreading) where {T<:Real} = GRPFParams{T}(maxiterations, maxnodes, skinnytriangle,
+    tess_sizehint, tolerance, multithreading)
 GRPFParams(tess_sizehint::Integer, tolerance::Real, multithreading::Bool=false) = GRPFParams(100, 500000, 3, tess_sizehint, tolerance, multithreading)
 GRPFParams() = GRPFParams(100, 500000, 3, 5000, 1e-9, false)
 
@@ -697,6 +706,7 @@ function tesselate!(
     zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
 
     iteration = 0
+    let phasediffs
     while (iteration < params.maxiterations) && (numnodes < params.maxnodes)
         iteration += 1
 
@@ -737,6 +747,7 @@ function tesselate!(
     end
 
     return tess, E, quadrants, phasediffs
+    end  # let
 end
 
 """

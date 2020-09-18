@@ -58,6 +58,14 @@ tmpr, tmpp = grpf(defaultfcn, origcoords, GRPFParams(8000, 1e-9, true))
 @test approxmatch(tmpr, zroots)
 @test approxmatch(tmpp, zpoles)
 
+# Test with very low maxnodes
+maxnodes = 10
+@test_logs (:warn,"GRPFParams `tess_sizehint` is greater than `maxnodes`") GRPFParams(100, maxnodes, 3, 8000, 1e-9, false)
+params = GRPFParams(100, maxnodes, 3, 8000, 1e-9, false)
+# `let` block needed for phasediffs to be defined when we don't exit tesselation early
+tmpr, tmpp, quadrants, phasediffs, tess, g2f = grpf(defaultfcn, origcoords, PlotData(), params)
+@test phasediffs isa Vector{Int8}
+
 # Test with big origcoords
 xb = big"-2"  # real part begin
 xe = big"2"  # real part end
