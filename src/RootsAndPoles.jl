@@ -683,6 +683,9 @@ function tesselate!(
         setindex!.(newnodes, (1:length(newnodes)).+numnodes)
     end
 
+    (iteration >= params.maxiterations) && @warn "GRPFParams.maxiterations reached"
+    (numnodes >= params.maxnodes) && @warn "GRPFParams.maxnodes reached"
+
     return tess, E, quadrants
 end
 
@@ -745,6 +748,9 @@ function tesselate!(
         # Have to assign indexes to new nodes (which are all currently -1)
         setindex!.(newnodes, (1:length(newnodes)).+numnodes)
     end
+
+    (iteration >= params.maxiterations) && @warn "GRPFParams.maxiterations reached"
+    (numnodes >= params.maxnodes) && @warn "GRPFParams.maxnodes reached"
 
     return tess, E, quadrants, phasediffs
     end  # let

@@ -63,8 +63,7 @@ maxnodes = 10
 @test_logs (:warn,"GRPFParams `tess_sizehint` is greater than `maxnodes`") GRPFParams(100, maxnodes, 3, 8000, 1e-9, false)
 params = GRPFParams(100, maxnodes, 3, 8000, 1e-9, false)
 # `let` block needed for phasediffs to be defined when we don't exit tesselation early
-tmpr, tmpp, quadrants, phasediffs, tess, g2f = grpf(defaultfcn, origcoords, PlotData(), params)
-@test phasediffs isa Vector{Int8}
+@test_logs (:warn,"GRPFParams.maxnodes reached") grpf(defaultfcn, origcoords, PlotData(), params)
 
 # Test with big origcoords
 xb = big"-2"  # real part begin
