@@ -4,10 +4,13 @@
 
 A Julia implementation of [GRPF](https://github.com/PioKow/GRPF) by Piotr Kowalczyk.
 
+**NEWS**
+
+In `v1.2.1`, `GRPFParams` are now `mutable` structs. Although this can be considered a breaking change because two structs which are equal are now not identical, in the sense that `a == b` but `a !=== b`, most users should not have any code broken by this change.
+
 ## Description
 
-`RootsAndPoles.jl` attempts to **find all the zeros and poles of a complex valued function
-with complex arguments in a fixed region**. These types of problems are frequently encountered in electromagnetics, but the algorithm can also be used for similar problems in e.g. optics, acoustics, etc.
+`RootsAndPoles.jl` attempts to **find all the zeros and poles of a complex valued function with complex arguments in a fixed region**. These types of problems are frequently encountered in electromagnetics, but the algorithm can also be used for similar problems in e.g. optics, acoustics, etc.
 
 The GRPF algorithm first samples the function on a triangular mesh through Delaunay triangulation. Candidate regions to search for roots and poles are determined and the discretized [Cauchy's argument principle](https://en.wikipedia.org/wiki/Argument_principle) is applied _without needing the derivative of the function or integration over the contour_. To improve the accuracy of the results, a self-adaptive mesh refinement occurs inside the identified candidate regions.
 
