@@ -62,7 +62,7 @@ will improve performance. By default, `tess_sizehint` is 5000.
 `tolerance` maximum allowed edge length of the tesselation defined in the
 `origcoords` domain. By default, `tolerance` is 1e-9.
 """
-struct GRPFParams{T<:Real}
+mutable struct GRPFParams{T<:Real}
     maxiterations::Int
     maxnodes::Int
     skinnytriangle::Int
@@ -88,6 +88,14 @@ GRPFParams(maxiterations, maxnodes, skinnytriangle, tess_sizehint, tolerance::T,
     tess_sizehint, tolerance, multithreading)
 GRPFParams(tess_sizehint::Integer, tolerance::Real, multithreading::Bool=false) = GRPFParams(100, 500000, 3, tess_sizehint, tolerance, multithreading)
 GRPFParams() = GRPFParams(100, 500000, 3, 5000, 1e-9, false)
+
+function Base.isequal(a::GRPFParams, b::GRPFParams)
+    for n in fieldnames(GRPFParams)
+        isequal(getfield(a,n), getfield(b,n)) || return false
+    end
+    return true
+end
+Base.:(==)(a::GRPFParams, b::GRPFParams) = isequal(a,b)
 
 struct PlotData end
 
