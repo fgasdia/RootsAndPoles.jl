@@ -6,7 +6,7 @@ A Julia implementation of [GRPF](https://github.com/PioKow/GRPF) by Piotr Kowalc
 
 **NEWS**
 
-In `v1.2.1`, `GRPFParams` are now `mutable` structs. Although this can be considered a breaking change because two structs which are equal are now not identical, in the sense that `a == b` but `a !=== b`, most users should not have any code broken by this change.
+In `v1.2.0`, `GRPFParams` are now `mutable` structs. Although this can be considered a breaking change because two structs which are equal are now not identical, in the sense that `a == b` but `a !=== b`, most users should not have any code broken by this change.
 
 ## Description
 
