@@ -43,7 +43,7 @@ const MINCOORD = nextfloat(min_coord, 10)
 """
     GRPFParams
 
-Structure for holding values used by `RootsAndPoles.jl` to stop iterating or
+Mutable struct for holding values used by `RootsAndPoles.jl` to stop iterating or
 split Delaunay triangles.
 
 `maxiterations` is the maximum number of refinement iterations before `grpf`
@@ -61,32 +61,33 @@ will improve performance. By default, `tess_sizehint` is 5000.
 
 `tolerance` maximum allowed edge length of the tesselation defined in the
 `origcoords` domain. By default, `tolerance` is 1e-9.
+
+`multithreading` uses `Threads.@threads` to run the user-provided function `fcn` across the
+DelaunayTriangulation. By default, `multithreading` is `false`.
 """
-mutable struct GRPFParams{T<:Real}
+mutable struct GRPFParams
     maxiterations::Int
     maxnodes::Int
     skinnytriangle::Int
     tess_sizehint::Int
-    tolerance::T
+    tolerance::Float64
     multithreading::Bool
 
-    function GRPFParams{T}(maxiterations, maxnodes, skinnytriangle, tess_sizehint,
-            tolerance, multithreading) where {T<:Real}
+    function GRPFParams(maxiterations, maxnodes, skinnytriangle, tess_sizehint, tolerance,
+                        multithreading)
         tess_sizehint > maxnodes && @warn "GRPFParams `tess_sizehint` is greater than `maxnodes`"
         new(maxiterations, maxnodes, skinnytriangle, tess_sizehint, tolerance, multithreading)
     end
 end
 
 """
-    GRPFParams(tess_sizehint::Integer, tolerance::Real)
+    GRPFParams(tess_sizehint::Integer, tolerance::Real, multithreading::Bool=false)
 
-Convenience function for creating a `GRPFParams` object with the most
-important parameters, `tess_sizehint` and `tolerance`.
+Convenience function for creating a `GRPFParams` object with the most important parameters,
+`tess_sizehint` and `tolerance`.
 """
-GRPFParams(maxiterations, maxnodes, skinnytriangle, tess_sizehint, tolerance::T,
-    multithreading) where {T<:Real} = GRPFParams{T}(maxiterations, maxnodes, skinnytriangle,
-    tess_sizehint, tolerance, multithreading)
-GRPFParams(tess_sizehint::Integer, tolerance::Real, multithreading::Bool=false) = GRPFParams(100, 500000, 3, tess_sizehint, tolerance, multithreading)
+GRPFParams(tess_sizehint::Integer, tolerance::Real, multithreading::Bool=false) =
+    GRPFParams(100, 500000, 3, tess_sizehint, tolerance, multithreading)
 GRPFParams() = GRPFParams(100, 500000, 3, 5000, 1e-9, false)
 
 function Base.isequal(a::GRPFParams, b::GRPFParams)
