@@ -3,17 +3,16 @@ __precompile__(true)
 """
     RootsAndPoles.jl
 
-RootsAndPoles.jl is a Julia implementation of the Global complex Roots and Poles
-Finding (GRPF) algorithm.
+`RootsAndPoles` is a Julia implementation of the Global complex Roots and Poles Finding
+(GRPF) algorithm.
 
 Matlab code is available under MIT license at https://github.com/PioKow/GRPF.
 
 # References
 
-[^1] P. Kowalczyk, “Global complex roots and poles finding algorithm based on phase
-analysis for propagation and radiation problems,” IEEE Transactions on Antennas
-and Propagation, vol. 66, no. 12, pp. 7198–7205, Dec. 2018,
-doi: 10.1109/TAP.2018.2869213.
+[^1]: P. Kowalczyk, “Global complex roots and poles finding algorithm based on phase
+    analysis for propagation and radiation problems,” IEEE Transactions on Antennas and
+    Propagation, vol. 66, no. 12, pp. 7198–7205, Dec. 2018, doi: 10.1109/TAP.2018.2869213.
 """
 module RootsAndPoles
 
@@ -34,36 +33,34 @@ using VoronoiDelaunay
 import VoronoiDelaunay: getx, gety, DelaunayEdge, DelaunayTriangle
 
 # NOTE: `max_coord` and `min_coord` are provided by `VoronoiDelaunay.jl`
-# We are even more conservative than going from `max_coord` to
-# `min_coords` because it is possible to run into floating point issues at
-# the very limits
+# We are even more conservative than going from `max_coord` to `min_coords` because it is
+# possible to run into floating point issues at the very limits
 const MAXCOORD = nextfloat(max_coord, -10)
 const MINCOORD = nextfloat(min_coord, 10)
 
 """
     GRPFParams
 
-Mutable struct for holding values used by `RootsAndPoles.jl` to stop iterating or
-split Delaunay triangles.
+Mutable struct for holding values used by `RootsAndPoles` to stop iterating or split
+Delaunay triangles.
 
-`maxiterations` is the maximum number of refinement iterations before `grpf`
-returns. By default, `maxiterations` is 100.
+Default values are provided by `GRPFParams()`.
 
-`maxnodes` is the maximum number of Delaunay tessalation nodes before `grpf`
-returns. By default, `maxnodes` is 500000.
+# Fields
 
-Delaunay triangles with ratio of their longest to shortest side length greater
-than `skinnytriangle` will be split during the `grpf` refinement iterations.
-
-`tess_sizehint` is used to provide a size hint to the total number of expected
-nodes in the Delaunay tesselation. Setting this number approximately correct
-will improve performance. By default, `tess_sizehint` is 5000.
-
-`tolerance` maximum allowed edge length of the tesselation defined in the
-`origcoords` domain. By default, `tolerance` is 1e-9.
-
-`multithreading` uses `Threads.@threads` to run the user-provided function `fcn` across the
-DelaunayTriangulation. By default, `multithreading` is `false`.
+- `maxiterations::Int = 100`: the maximum number of refinement iterations before `grpf`
+    returns.
+- `maxnodes::Int = 500000`: the maximum number of Delaunay tessalation nodes before `grpf`
+    returns.
+- `skinnytriangle::Int = 3`: maximum ratio of the longest to shortest side length of
+    Delaunay triangles before they are split during `grpf` refinement iterations.
+- `tess_sizehint::Int = 5000`: provide a size hint to the total number of expected nodes in
+    the Delaunay tesselation. Setting this number approximately correct can improve
+    performance.
+- `tolerance::Float64 = 1e-9`: maximum allowed edge length of the tesselation defined in the
+    `origcoords` domain before returning.
+- `multithreading::Bool = false`: use `Threads.@threads` to run the user-provided function
+    `fcn` across the `DelaunayTriangulation`.
 """
 mutable struct GRPFParams
     maxiterations::Int
@@ -79,16 +76,16 @@ mutable struct GRPFParams
         new(maxiterations, maxnodes, skinnytriangle, tess_sizehint, tolerance, multithreading)
     end
 end
+GRPFParams() = GRPFParams(100, 500000, 3, 5000, 1e-9, false)
 
 """
-    GRPFParams(tess_sizehint::Integer, tolerance::Real, multithreading::Bool=false)
+    GRPFParams(tess_sizehint, tolerance, multithreading=false)
 
 Convenience function for creating a `GRPFParams` object with the most important parameters,
-`tess_sizehint` and `tolerance`.
+`tess_sizehint`, `tolerance`, and `multithreading`.
 """
-GRPFParams(tess_sizehint::Integer, tolerance::Real, multithreading::Bool=false) =
+GRPFParams(tess_sizehint, tolerance, multithreading=false) =
     GRPFParams(100, 500000, 3, tess_sizehint, tolerance, multithreading)
-GRPFParams() = GRPFParams(100, 500000, 3, 5000, 1e-9, false)
 
 function Base.isequal(a::GRPFParams, b::GRPFParams)
     for n in fieldnames(GRPFParams)
@@ -101,18 +98,19 @@ Base.:(==)(a::GRPFParams, b::GRPFParams) = isequal(a,b)
 struct PlotData end
 
 """
-    Geometry2Function
+    Geometry2Function{T}
 
-Store conversion coefficients from the `VoronoiDelaunay.jl` domain to the `origcoords`
+Store conversion coefficients from the `VoronoiDelaunay` domain to the `origcoords`
 function domain.
 
-Geometry2Function objects can be called as a function, e.g.
+`Geometry2Function` instances can be called as a function, e.g.
 `z_functiondomain = g2f(z_voronoidelaunay)`.
 
-Geometry2Function structs are created internally to `RootsAndPoles.jl` with the appropriate
-scaling parameters but are returned when `grpf` is called with the `PlotData()` argument.
+`Geometry2Function` structs are created internally to `RootsAndPoles` with the
+appropriate scaling parameters but are returned when `grpf` is called with the `PlotData()`
+argument.
 """
-struct Geometry2Function{T<:AbstractFloat}
+struct Geometry2Function{T}
     ra::T
     rb::T
     ia::T
@@ -123,13 +121,13 @@ end
 Base.eltype(f::Geometry2Function{T}) where T = T
 
 """
-    ScaledFunction{T<:Function}
+    ScaledFunction{F,G<:Geometry2Function}
 
-Store conversion coefficients from the `VoronoiDelaunay` domain to the
-`origcoords` domain so that a `ScaledFunction` can be called in place of the original
-function when providing an argument in the `VoronoiDelaunay` domain.
+Store conversion coefficients from the `VoronoiDelaunay` domain to the `origcoords` domain
+so that a `ScaledFunction` can be called in place of the original function when providing an
+argument in the `VoronoiDelaunay` domain.
 """
-struct ScaledFunction{F<:Function,G<:Geometry2Function}
+struct ScaledFunction{F,G<:Geometry2Function}
     fcn::F
     g2f::G
 end
@@ -164,18 +162,18 @@ Convert complex function value `val` to quadrant number.
 end
 
 """
-    assignquadrants!(quadrants, nodes, f)
+    assignquadrants!(quadrants, nodes, f, multithreading=false)
 
-Evaluate function `f` for [`quadrant`](@ref) at `nodes` and fill `quadrants`.
+Evaluate function `f` for [`quadrant`](@ref) at `nodes` and fill `quadrants` in-place.
 
-`quadrants` is a vector where each index corresponds to `IndexablePoint2D` node
-index.
+Each element of `quadrants` corresponds to the index of `IndexablePoint2D` in `nodes`.
 """
-@inline function assignquadrants!(
+function assignquadrants!(
     quadrants::Vector{<:Integer},
     nodes::Vector{IndexablePoint2D},
-    f::ScaledFunction{T},
-    multithreading=false) where T
+    f::ScaledFunction{F,G},
+    multithreading=false
+    ) where {F,G}
 
     if multithreading
         @threads for ii in eachindex(nodes)
@@ -196,12 +194,12 @@ end
 
 Fill in candidate edges `E` that contain a phase change of 2 quadrants.
 
-Any root or pole is located at the point where the regions described by four
-different quadrants meet. Since any triangulation of the four nodes located in
-the four different quadrants requires at least one edge of ``|ΔQ| = 2``, then
-all such edges are potentially in the vicinity of a root or pole.
+Any root or pole is located at the point where the regions described by four different
+quadrants meet. Since any triangulation of the four nodes located in the four different
+quadrants requires at least one edge of ``|ΔQ| = 2``, then all such edges are potentially in
+the vicinity of a root or pole.
 
-Order of `E` is not guaranteed.
+`E` is not sorted.
 """
 function candidateedges!(
     E::Vector{DelaunayEdge{IndexablePoint2D}},
@@ -251,9 +249,9 @@ function candidateedges!(
 end
 
 """
-    candidateedges!(phasediffs, E, tess, quadrants, ::PlotData)
+    candidateedges!(E, tess, quadrants, ::PlotData)
 
-Return candidate edges `E` and the `phasediffs` across each edge.
+Return candidate edges `E` and the `phasediffs` as a `Vector{Int8}` across each edge.
 """
 function candidateedges!(
     E::Vector{DelaunayEdge{IndexablePoint2D}},
@@ -289,6 +287,9 @@ end
     zone(triangle, edge_idxs)
 
 Return zone `1` or `2` for `triangle`.
+
+Zone `1` triangles have more than one node in `edge_idxs`, whereas zone `2` triangles have
+only a single node.
 """
 function zone(
     triangle::DelaunayTriangle{IndexablePoint2D},
@@ -323,9 +324,12 @@ end
 """
     uniqueindices!(idxs, edges)
 
-Return unique indices of all nodes in `edges`.
+Compute unique indices `idxs` in-place of all nodes in `edges`.
 """
-@inline function uniqueindices!(idxs::Vector{<:Integer}, edges::Vector{DelaunayEdge{IndexablePoint2D}})
+function uniqueindices!(
+    idxs::Vector{<:Integer},
+    edges::Vector{DelaunayEdge{IndexablePoint2D}}
+    )
     empty!(idxs)
     for i in eachindex(edges)
         @inbounds ei = edges[i]
@@ -340,7 +344,8 @@ end
 """
     zone1newnodes!(newnodes, triangles, g2f, tolerance)
 
-Add nodes to `newnodes` in zone 1, i.e. triangles that had more than one node.
+Add nodes to `newnodes` in-place if they are in zone 1, i.e. triangles that had more than
+one node.
 """
 function zone1newnodes!(
     newnodes::Vector{IndexablePoint2D},
@@ -354,8 +359,8 @@ function zone1newnodes!(
     n1b = getb(triangle1)
     push!(newnodes, (n1a+n1b)/2)
 
-    for ii = 1:length(triangles)-1
-        @inbounds triangle = triangles[ii]
+    @inbounds for ii = 1:length(triangles)-1
+        triangle = triangles[ii]
         na = geta(triangle)
         nb = getb(triangle)
         nc = getc(triangle)
@@ -399,8 +404,7 @@ end
 
 Add node to `newnodes` for zone 2 ("skinny") triangles.
 
-`skinnytriangle` is the maximum allowed ratio of the longest to shortest side
-length of each triangle.
+`skinnytriangle` is the maximum allowed ratio of the longest to shortest side length.
 """
 @inline function zone2newnode!(
     newnodes::Vector{IndexablePoint2D},
@@ -425,10 +429,10 @@ length of each triangle.
 end
 
 """
-    splittriangles!(newnodes, tess, edge_idxs, params)
+    splittriangles!(zone1triangles, newnodes, tess, edge_idxs, params)
 
-Add zone 2 triangles to `newnodes` and then update vector of zone 1 triangles,
-which require special handling.
+Add zone 2 triangles to `newnodes` and then update vector of zone 1 triangles, which require
+special handling.
 """
 function splittriangles!(
     zone1triangles::Vector{DelaunayTriangle{IndexablePoint2D}},
@@ -454,8 +458,8 @@ end
 """
     findnextnode(prevnode, refnode, tempnodes, g2f)
 
-Find the index of the next node in the candidate region boundary process. The
-next one (after the reference) is picked from the fixed set of nodes.
+Find the index of the next node in the candidate region boundary process. The next one
+(after the reference) is picked from the fixed set of nodes.
 """
 @inline function findnextnode(
     prevnode::IndexablePoint2D,
@@ -531,8 +535,8 @@ function evaluateregions!(
     g2f::Geometry2Function
     )
 
-    # NOTE: The nodes of each region are in reverse order compared to Matlab
-    # with respect to their quadrants
+    # NOTE: The nodes of each region are in reverse order compared to Matlab with respect
+    # to their quadrants
 
     # Initialize
     numregions = 1
@@ -612,7 +616,8 @@ function rootsandpoles(
             elseif dQ[jj] == -3
                 dQ[jj] = 1
             elseif abs(dQ[jj]) == 2
-                # ``|ΔQ| = 2`` is ambiguous; cannot tell whether phase increases or decreases by two quadrants
+                # ``|ΔQ| = 2`` is ambiguous; cannot tell whether phase increases or
+                # decreases by two quadrants
                 dQ[jj] = 0
             end
         end
@@ -630,9 +635,10 @@ function rootsandpoles(
 end
 
 """
-    tesselate!(tess, newnodes, fcn, params)
+    tesselate!(tess, newnodes, f, params)
 
-Label quadrants, identify candidate edges, and iteratively split triangles.
+Label quadrants, identify candidate edges, and iteratively split triangles, returning
+the tuple `(tess, E, quadrants)`.
 """
 function tesselate!(
     tess::DelaunayTessellation2D{IndexablePoint2D},
@@ -768,10 +774,10 @@ end
 """
     grpf(fcn, origcoords, params=GRPFParams())
 
-Return a vector `roots` and a vector of `poles` of a single (complex) argument
-function `fcn`.
+Return a vector `roots` and a vector `poles` of a single (complex) argument function
+`fcn`.
 
-Searches within a domain specified by the vector of `origcoords`.
+Searches within a domain specified by the vector of complex `origcoords`.
 
 # Examples
 ```jldoctest
@@ -798,7 +804,7 @@ julia> poles
  -2.5363675604239815e-10 - 1.0000000002980232im
 ```
 """
-function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, params=GRPFParams())
+function grpf(fcn, origcoords::AbstractArray{<:Complex}, params=GRPFParams())
 
     # TODO: See pull request #50 on VoronoiDelaunay.jl which handles the space
     # mapping automatically.
@@ -816,12 +822,15 @@ function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, params=GRPFPa
     ia = width/(imax-imin)
     ib = MAXCOORD - ia*imax
 
-    origcoords = fcn2geom.(origcoords, ra, rb, ia, ib)
+    scaledorigcoords = fcn2geom.(origcoords, ra, rb, ia, ib)
 
-    @assert minimum(real, origcoords) >= min_coord && minimum(imag, origcoords) >= min_coord &&
-        maximum(real, origcoords) <= max_coord && maximum(imag, origcoords) <= max_coord "Scaled coordinates out of bounds"
+    @assert minimum(real, scaledorigcoords) >= min_coord &&
+        minimum(imag, scaledorigcoords) >= min_coord &&
+        maximum(real, scaledorigcoords) <= max_coord &&
+        maximum(imag, scaledorigcoords) <= max_coord "Scaled coordinates out of bounds"
 
-    newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
+    newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in
+                enumerate(scaledorigcoords)]
     tess = DelaunayTessellation2D{IndexablePoint2D}(params.tess_sizehint)
 
     g2f = Geometry2Function(ra, rb, ia, ib)
@@ -842,9 +851,9 @@ end
 """
     grpf(fcn, origcoords, ::PlotData, params=GRPFParams())
 
-Variant of `grpf` that returns `quadrants`, `phasediffs`, the VoronoiDelauany.jl tesselation
-`tess`, and the Geometry2Function struct `g2f` for converting from the VoronoiDelaunay.jl to
-function space, in addition to `zroots` and `zpoles`.
+Variant of `grpf` that returns `quadrants`, `phasediffs`, the `VoronoiDelauany`
+tesselation `tess`, and the `Geometry2Function` struct `g2f` for converting from the
+`VoronoiDelaunay` to function space, in addition to `zroots` and `zpoles`.
 
 These additional outputs are primarily for plotting or diagnostics.
 
@@ -863,7 +872,7 @@ julia> origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 julia> roots, poles, quadrants, phasediffs, tess, g2f = grpf(simplefcn, origcoords, PlotData());
 ```
 """
-function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, ::PlotData, params=GRPFParams())
+function grpf(fcn, origcoords::AbstractArray{<:Complex}, ::PlotData, params=GRPFParams())
     # Need to map space domain for VoronoiDelaunay.jl
     rmin, rmax = minimum(real, origcoords), maximum(real, origcoords)
     imin, imax = minimum(imag, origcoords), maximum(imag, origcoords)
@@ -877,11 +886,14 @@ function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, ::PlotData, p
     ia = width/(imax-imin)
     ib = MAXCOORD - ia*imax
 
-    origcoords = fcn2geom.(origcoords, ra, rb, ia, ib)
-    @assert minimum(real, origcoords) >= min_coord && minimum(imag, origcoords) >= min_coord &&
-        maximum(real, origcoords) <= max_coord && maximum(imag, origcoords) <= max_coord "Scaled coordinates out of bounds"
+    scaledorigcoords = fcn2geom.(origcoords, ra, rb, ia, ib)
+    @assert minimum(real, scaledorigcoords) >= min_coord &&
+        minimum(imag, scaledorigcoords) >= min_coord &&
+        maximum(real, scaledorigcoords) <= max_coord &&
+        maximum(imag, scaledorigcoords) <= max_coord "Scaled coordinates out of bounds"
 
-    newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in enumerate(origcoords)]
+    newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in
+                enumerate(scaledorigcoords)]
     tess = DelaunayTessellation2D{IndexablePoint2D}(params.tess_sizehint)
 
     g2f = Geometry2Function(ra, rb, ia, ib)
@@ -890,7 +902,8 @@ function grpf(fcn::Function, origcoords::AbstractArray{<:Complex}, ::PlotData, p
     tess, E, quadrants, phasediffs = tesselate!(tess, newnodes, f, params, PlotData())
 
     complexT = complex(eltype(g2f))
-    isempty(E) && return Vector{complexT}(), Vector{complexT}(), quadrants, phasediffs, tess, g2f
+    isempty(E) && return (Vector{complexT}(), Vector{complexT}(), quadrants, phasediffs,
+                          tess, g2f)
 
     C = contouredges(tess, E)
     regions = evaluateregions!(C, g2f)
