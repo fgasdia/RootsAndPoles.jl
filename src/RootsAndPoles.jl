@@ -111,13 +111,13 @@ appropriate scaling parameters but are returned when `grpf` is called with the `
 argument.
 """
 struct Geometry2Function{T}
-    ra::T
-    rb::T
-    ia::T
-    ib::T
+    rmin::T
+    rmax::T
+    imin::T
+    imax::T
 end
-(f::Geometry2Function)(z) = geom2fcn(z, f.ra, f.rb, f.ia, f.ib)
-(f::Geometry2Function)(x, y) = geom2fcn(x, y, f.ra, f.rb, f.ia, f.ib)
+(f::Geometry2Function)(z) = geom2fcn(z, f.rmin, f.rmax, f.imin, f.imax)
+(f::Geometry2Function)(x, y) = geom2fcn(x, y, f.rmin, f.rmax, f.imin, f.imax)
 Base.eltype(f::Geometry2Function{T}) where T = T
 
 """
@@ -643,9 +643,9 @@ the tuple `(tess, E, quadrants)`.
 function tesselate!(
     tess::DelaunayTessellation2D{IndexablePoint2D},
     newnodes::Vector{IndexablePoint2D},
-    f::ScaledFunction{F,G},
+    f::ScaledFunction,
     params::GRPFParams
-    ) where {F,G}
+    )
 
     # Initialize
     numnodes = tess._total_points_added
@@ -707,10 +707,10 @@ end
 function tesselate!(
     tess::DelaunayTessellation2D{IndexablePoint2D},
     newnodes::Vector{IndexablePoint2D},
-    f::ScaledFunction{F,G},
+    f::ScaledFunction,
     params::GRPFParams,
     ::PlotData
-    ) where {F,G}
+    )
 
     # Initialize
     numnodes = tess._total_points_added
@@ -771,6 +771,25 @@ function tesselate!(
     end  # let
 end
 
+function setup(origcoords)
+    rmin, rmax = minimum(real, origcoords), maximum(real, origcoords)
+    imin, imax = minimum(imag, origcoords), maximum(imag, origcoords)
+
+    # Scaling parameters
+    g2f = Geometry2Function(rmin, rmax, imin, imax)
+    scaledorigcoords = fcn2geom.(origcoords, rmin, rmax, imin, imax)
+
+    @assert minimum(real, scaledorigcoords) >= min_coord &&
+        minimum(imag, scaledorigcoords) >= min_coord &&
+        maximum(real, scaledorigcoords) <= max_coord &&
+        maximum(imag, scaledorigcoords) <= max_coord "Scaled coordinates out of bounds"
+
+    newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in
+                enumerate(scaledorigcoords)]
+
+    return newnodes, g2f
+end
+
 """
     grpf(fcn, origcoords, params=GRPFParams())
 
@@ -805,36 +824,10 @@ julia> poles
 ```
 """
 function grpf(fcn, origcoords::AbstractArray{<:Complex}, params=GRPFParams())
-
-    # TODO: See pull request #50 on VoronoiDelaunay.jl which handles the space
-    # mapping automatically.
-
-    # Need to map space domain for VoronoiDelaunay.jl
-    rmin, rmax = minimum(real, origcoords), maximum(real, origcoords)
-    imin, imax = minimum(imag, origcoords), maximum(imag, origcoords)
-
-    # Be slightly conservative with our scaling to ensure we stay inside of
-    # VoronoiDelaunay.jl `max_coord` and `min_coord`
-    width = MAXCOORD - MINCOORD
-    ra = width/(rmax-rmin)
-    rb = MAXCOORD - ra*rmax
-
-    ia = width/(imax-imin)
-    ib = MAXCOORD - ia*imax
-
-    scaledorigcoords = fcn2geom.(origcoords, ra, rb, ia, ib)
-
-    @assert minimum(real, scaledorigcoords) >= min_coord &&
-        minimum(imag, scaledorigcoords) >= min_coord &&
-        maximum(real, scaledorigcoords) <= max_coord &&
-        maximum(imag, scaledorigcoords) <= max_coord "Scaled coordinates out of bounds"
-
-    newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in
-                enumerate(scaledorigcoords)]
-    tess = DelaunayTessellation2D{IndexablePoint2D}(params.tess_sizehint)
-
-    g2f = Geometry2Function(ra, rb, ia, ib)
+    newnodes, g2f = setup(origcoords)
     f = ScaledFunction(fcn, g2f)
+
+    tess = DelaunayTessellation2D{IndexablePoint2D}(params.tess_sizehint)
 
     tess, E, quadrants = tesselate!(tess, newnodes, f, params)
 
@@ -873,31 +866,10 @@ julia> roots, poles, quadrants, phasediffs, tess, g2f = grpf(simplefcn, origcoor
 ```
 """
 function grpf(fcn, origcoords::AbstractArray{<:Complex}, ::PlotData, params=GRPFParams())
-    # Need to map space domain for VoronoiDelaunay.jl
-    rmin, rmax = minimum(real, origcoords), maximum(real, origcoords)
-    imin, imax = minimum(imag, origcoords), maximum(imag, origcoords)
-
-    # Be slightly conservative with our scaling to ensure we stay inside of
-    # VoronoiDelaunay.jl `max_coord` and `min_coord`
-    width = MAXCOORD - MINCOORD
-    ra = width/(rmax-rmin)
-    rb = MAXCOORD - ra*rmax
-
-    ia = width/(imax-imin)
-    ib = MAXCOORD - ia*imax
-
-    scaledorigcoords = fcn2geom.(origcoords, ra, rb, ia, ib)
-    @assert minimum(real, scaledorigcoords) >= min_coord &&
-        minimum(imag, scaledorigcoords) >= min_coord &&
-        maximum(real, scaledorigcoords) <= max_coord &&
-        maximum(imag, scaledorigcoords) <= max_coord "Scaled coordinates out of bounds"
-
-    newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in
-                enumerate(scaledorigcoords)]
-    tess = DelaunayTessellation2D{IndexablePoint2D}(params.tess_sizehint)
-
-    g2f = Geometry2Function(ra, rb, ia, ib)
+    newnodes, g2f = setup(origcoords)
     f = ScaledFunction(fcn, g2f)
+
+    tess = DelaunayTessellation2D{IndexablePoint2D}(params.tess_sizehint)
 
     tess, E, quadrants, phasediffs = tesselate!(tess, newnodes, f, params, PlotData())
 

@@ -60,7 +60,7 @@ tmpr, tmpp = grpf(defaultfcn, origcoords, GRPFParams(8000, 1e-9, true))
 
 # Test with very low maxnodes
 maxnodes = 10
-params = @test_logs (:warn,"GRPFParams `tess_sizehint` is greater than `maxnodes`") GRPFParams(100, maxnodes, 3, 8000, 1e-9, false)
+params = GRPFParams(100, maxnodes, 3, maxnodes-1, 1e-9, false)
 @test_logs (:warn,"GRPFParams.maxnodes reached") grpf(defaultfcn, origcoords, PlotData(), params)
 
 # Test with big origcoords

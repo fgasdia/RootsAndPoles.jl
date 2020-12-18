@@ -1,33 +1,34 @@
 function graphenefunction(z)
-      f = 1e12
-      c = 299792458
-      μ₀ = 4π*1e-7
-      ϵ₀ = 1/(μ₀*c^2)
+    f = 1e12
+    c = 299792458.0
+    μ₀ = 4π*1e-7
+    ϵ₀ = 1/(μ₀*c^2)
 
-      e = 1.602176565e-19
-      kB = 1.3806488e-23
-      hk = 1.05457168e-34
-      vFe = 1e6
-      muc = 0.05*e
-      t = 0.135e-12
-      T = 300
-      ϵᵣ₁ = 1.0
-      ϵᵣ₂ = 11.9
+    e = 1.602176565e-19
+    kB = 1.3806488e-23
+    hk = 1.05457168e-34
+    vFe = 1e6
+    muc = 0.05*e
+    t = 0.135e-12
+    T = 300
+    ϵᵣ₁ = 1.0
+    ϵᵣ₂ = 11.9
 
-      ω = 2π*f
-      k₀ = ω/c
-      kᵣ₀ = -im*z*k₀
+    ω = 2π*f
+    k₀ = ω/c
+    kᵣ₀ = -im*z*k₀
 
-      Slo=-im*e^2*kB*T*log(2+2*cosh(muc/kB/T)) / (π*hk^2*(ω-im/t))
+    Slo=-im*e^2*kB*T*log(2+2*cosh(muc/kB/T)) / (π*hk^2*(ω-im/t))
 
-      a = -3*vFe^2*Slo/(4*(ω-im/t)^2)
-      b = a/3
+    a = -3*vFe^2*Slo/(4*(ω-im/t)^2)
+    b = a/3
 
-      Y1TM = ω*ϵᵣ₁*ϵ₀/sqrt(ϵᵣ₁*k₀^2 - kᵣ₀^2);
-      Y2TM = ω*ϵᵣ₂*ϵ₀/sqrt(ϵᵣ₂*k₀^2 - kᵣ₀^2);
-      YSTM = Slo + 1*a*kᵣ₀^2 + 1*b*kᵣ₀^2;
+    Y1TM = ω*ϵᵣ₁*ϵ₀/sqrt(ϵᵣ₁*k₀^2 - kᵣ₀^2);
+    Y2TM = ω*ϵᵣ₂*ϵ₀/sqrt(ϵᵣ₂*k₀^2 - kᵣ₀^2);
+    YSTM = Slo + 1*a*kᵣ₀^2 + 1*b*kᵣ₀^2;
 
-      w = (Y1TM + Y2TM + YSTM)*(-Y1TM + Y2TM + YSTM)*(Y1TM - Y2TM + YSTM)*(-Y1TM - Y2TM + YSTM) # four Riemann sheets
+    # four Riemann sheets
+    w = (Y1TM + Y2TM + YSTM)*(-Y1TM + Y2TM + YSTM)*(Y1TM - Y2TM + YSTM)*(-Y1TM - Y2TM + YSTM)
 end
 
 # Analysis parameters

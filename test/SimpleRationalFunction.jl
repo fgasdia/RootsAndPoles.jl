@@ -1,5 +1,5 @@
 function simplefcn(z)
-      w = (z - 1)*(z - im)^2*(z + 1)^3/(z + im)
+    w = (z - 1)*(z - im)^2*(z + 1)^3/(z + im)
 end
 
 # Analysis parameters

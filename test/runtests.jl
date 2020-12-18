@@ -6,6 +6,8 @@ using VoronoiDelaunay
 using RootsAndPoles
 import RootsAndPoles: IndexablePoint2D
 
+const RP = RootsAndPoles
+
 function approxmatch(A::AbstractArray, B::AbstractArray)
     length(A) == length(B) || return false
 
@@ -26,15 +28,11 @@ function approxmatch(A::AbstractArray, B::AbstractArray)
 end
 
 @testset "RootsAndPoles" begin
-    @testset "GRPFParams" begin
-        @test GRPFParams() == GRPFParams(100, 500000, 3, 5000, 1e-9, false)
-        @test GRPFParams(5000, 1e-3) == GRPFParams(100, 500000, 3, 5000, 1e-3, false)
-        @test GRPFParams(5000, 1e-3, true) == GRPFParams(100, 500000, 3, 5000, 1e-3, true)
-    end
+    include("RootsAndPoles.jl")
 
-    @time @testset "Simple Rational Function" begin include("SimpleRationalFunction.jl") end
-    @time @testset "Complex Modes" begin include("ComplexModes.jl") end
-    @time @testset "Lossy Multilayered Waveguide" begin include("LossyMultilayeredWaveguide.jl") end
-    @time @testset "Graphene Transmission Line" begin include("GrapheneTransmissionLine.jl") end
-    @time @testset "Default" begin include("DefaultFunction.jl") end
+    @testset "Simple Rational Function" begin include("SimpleRationalFunction.jl") end
+    @testset "Complex Modes" begin include("ComplexModes.jl") end
+    @testset "Lossy Multilayered Waveguide" begin include("LossyMultilayeredWaveguide.jl") end
+    @testset "Graphene Transmission Line" begin include("GrapheneTransmissionLine.jl") end
+    @testset "Default" begin include("DefaultFunction.jl") end
 end
