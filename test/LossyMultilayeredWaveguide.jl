@@ -1,20 +1,20 @@
 function wvgd(z)
-      ns = 0.065-4im
-      n1 = 1.5835
-      nc = 1.0
-      d1 = 1.81e-6
-      λ₀ = 0.6328e-6
-      k₀ = 2π/λ₀
-      k₀d1 = k₀*d1
-      κ1 = sqrt(n1^2 - z^2)
-      γs = sqrt(z^2 - ns^2)
-      γc = sqrt(z^2 - nc^2)
-      m11 = cos(κ1*k₀d1)
-      m12 = im/κ1*sin(κ1*k₀d1)
-      m21 = im*κ1*sin(κ1*k₀d1)
-      m22 = cos(κ1*k₀d1)
-      w = det([1.0    -m11+im*γc*m12
-               im*γs  -m21+im*γc*m22])
+    ns = 0.065-4im
+    n1 = 1.5835
+    nc = 1.0
+    d1 = 1.81e-6
+    λ₀ = 0.6328e-6
+    k₀ = 2π/λ₀
+    k₀d1 = k₀*d1
+    κ1 = sqrt(n1^2 - z^2)
+    γs = sqrt(z^2 - ns^2)
+    γc = sqrt(z^2 - nc^2)
+    m11 = cos(κ1*k₀d1)
+    m12 = im/κ1*sin(κ1*k₀d1)
+    m21 = im*κ1*sin(κ1*k₀d1)
+    m22 = cos(κ1*k₀d1)
+    w = det([1.0    -m11+im*γc*m12
+             1im*γs  -m21+im*γc*m22])
 end
 
 # Analysis parameters
