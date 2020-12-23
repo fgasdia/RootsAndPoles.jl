@@ -138,12 +138,19 @@ include("VoronoiDelaunayExtensions.jl")
 include("utils.jl")
 include("coordinate_domains.jl")
 
-export rectangulardomain, diskdomain, grpf, PlotData, GRPFParams
+export rectangulardomain, diskdomain, grpf, PlotData, getplotdata, GRPFParams
 
 """
     quadrant(val)::Int8
 
 Convert complex function value `val` to quadrant number.
+
+| Quadrant |       Phase       |
+|:--------:|:-----------------:|
+|    1     | 0 ≤ arg f < π/2   |
+|    2     | π/2 ≤ arg f < π   |
+|    3     | π ≤ arg f < 3π/2  |
+|    4     | 3π/2 ≤ arg f < 2π |
 """
 @inline function quadrant(val)::Int8
     # This function correponds to `vinq.m`
