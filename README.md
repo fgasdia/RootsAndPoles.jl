@@ -53,22 +53,22 @@ zroots, zpoles = grpf(simplefcn, origcoords)
 
 ### Additional parameters
 
-Additional parameters can be provided to the tesselation and GRPF algorithms by explicitly passing a `GRPFParams` struct.
+Additional parameters can be provided to the tessellation and GRPF algorithms by explicitly passing a `GRPFParams` struct.
 
-The two most useful parameters are `tess_sizehint` for the final total number of nodes in the internal `DelaunayTessellation2D` object and the root finder `tolerance` at which the mesh refinement stops. Just like `sizehint!` for other collections, setting `tess_sizehint` to a value approximately equal to the final number of nodes in the tesselation can improve performance. `tolerance` is the largest triangle edge length of the candidate edges defined in the `origcoords` domain. In practice, the root and pole accuracy is a larger value than `tolerance`, so `tolerance` needs to be set smaller than the desired tolerance on the roots and poles.
+The two most useful parameters are `tess_sizehint` for the final total number of nodes in the internal `DelaunayTessellation2D` object and the root finder `tolerance` at which the mesh refinement stops. Just like `sizehint!` for other collections, setting `tess_sizehint` to a value approximately equal to the final number of nodes in the tessellation can improve performance. `tolerance` is the largest triangle edge length of the candidate edges defined in the `origcoords` domain. In practice, the root and pole accuracy is a larger value than `tolerance`, so `tolerance` needs to be set smaller than the desired tolerance on the roots and poles.
 
 By default, the value of `tess_sizehint` is 5000 and the `tolerance` is 1e-9, but they can be specified by providing the `GRPFParams` argument
 ```julia
 zroots, zpoles = grpf(simplefcn, origcoords, GRPFParams(5000, 1e-9))
 ```
 
-Beginning version 1.1.0, calls to the provided function, e.g. `simplefcn`, can be **multithreaded** using Julia's `@threads` capability. The function is called at every node of the triangulation and the results should be independent of one another. For fast-running functions like `simplefcn`, the overall runtime of `grpf` is dominated by the Delaunay Triangulation itself, but for more complicated functions, threading can provide a significant advantage. To enable multithreading of the function calls, specify so as a `GRPFParams` argument
+Beginning version `v1.1.0`, calls to the provided function, e.g. `simplefcn`, can be **multithreaded** using Julia's `@threads` capability. The function is called at every node of the triangulation and the results should be independent of one another. For fast-running functions like `simplefcn`, the overall runtime of `grpf` is dominated by the Delaunay Triangulation itself, but for more complicated functions, threading can provide a significant advantage. To enable multithreading of the function calls, specify so as a `GRPFParams` argument
 ```julia
 zroots, zpoles = grpf(simplefcn, origcoords, GRPFParams(5000, 1e-9, true))
 ```
 By default, `multithreading = false`.
 
-Additional parameters which can be controlled are `maxiterations`, `maxnodes`, and `skinnytriangle`. `maxiterations` sets the maximum number of mesh refinement iterations and `maxnodes` sets the maximum number of nodes allowed in the `DelaunayTessellation2D` before returning. `skinnytriangle` is the maximum allowed ratio of the longest to shortest side length in a tesselation triangle before the triangle is automatically subdivided in the mesh refinement step. Default values are
+Additional parameters which can be controlled are `maxiterations`, `maxnodes`, and `skinnytriangle`. `maxiterations` sets the maximum number of mesh refinement iterations and `maxnodes` sets the maximum number of nodes allowed in the `DelaunayTessellation2D` before returning. `skinnytriangle` is the maximum allowed ratio of the longest to shortest side length in a tessellation triangle before the triangle is automatically subdivided in the mesh refinement step. Default values are
 
   - `maxiterations`: 100
   - `maxnodes`: 500000
@@ -83,12 +83,28 @@ zroots, zpoles = grpf(simplefcn, origcoords, GRPFParams(100, 500000, 3, 5000, 1e
 
 If mesh node `quadrants` and `phasediffs` are wanted for plotting, simply pass a `PlotData()` instance.
 ```julia
-zroots, zpoles, quadrants, phasediffs = grpf(simplefcn, origcoords, PlotData())
+zroots, zpoles, quadrants, phasediffs, tess, g2f = grpf(simplefcn, origcoords, PlotData())
 ```
 
 A `GRPFParams` can also be passed.
 ```julia
-zroots, zpoles, quadrants, phasediffs = grpf(simplefcn, origcoords, PlotData(), GRPFParams(5000, 1e-9))
+zroots, zpoles, quadrants, phasediffs, tess, g2f = grpf(simplefcn, origcoords, PlotData(), GRPFParams(5000, 1e-9))
+```
+
+In `v1.4.0`, a function `getplotdata` makes plotting the tessellation results more convenient. The code below was used to create the figure shown at the top of the page.
+
+```julia
+zroots, zpoles, quadrants, phasediffs, tess, g2f = grpf(simplefcn, origcoords, PlotData());
+z, edgecolors = getplotdata(tess, quadrants, phasediffs, g2f);
+
+using Plots
+
+pal = ["yellow", "purple", "green", "orange", "black", "cyan"]
+plot(real(z), imag(z), group=edgecolors, palette=pal,
+     xlabel="Re(z)", ylabel="Im(z)",
+     xlims=(-2, 2), ylims=(-2, 2),
+     legend=:outerright, legendtitle="f(z)", title="Simple rational function",
+     label=["Re > 0, Im ≥ 0" "Re ≤ 0, Im > 0" "Re < 0, Im ≤ 0" "Re ≥ 0, Im < 0" "" ""])
 ```
 
 ### Additional examples
@@ -97,7 +113,7 @@ See [test/](test/) for additional examples.
 
 ## Limitations
 
-This package uses [VoronoiDelaunay.jl](https://github.com/JuliaGeometry/VoronoiDelaunay.jl) to perform the Delaunay tesselation. `VoronoiDelaunay` is numerically limited to the range of `1.0+eps(Float64)` to `2.0-2eps(Float64)` for its point coordinates. `RootsAndPoles.jl` will accept functions and `origcoords` that aren't limited to `Complex{Float64}`, for example `Complex{BigFloat}`, but the internal tolerance of the root finding is limited to `Float64` precision.
+This package uses [VoronoiDelaunay.jl](https://github.com/JuliaGeometry/VoronoiDelaunay.jl) to perform the Delaunay tessellation. `VoronoiDelaunay` is numerically limited to the range of `1.0+eps(Float64)` to `2.0-2eps(Float64)` for its point coordinates. `RootsAndPoles.jl` will accept functions and `origcoords` that aren't limited to `Complex{Float64}`, for example `Complex{BigFloat}`, but the internal tolerance of the root finding is limited to `Float64` precision.
 
 ## Citing
 
