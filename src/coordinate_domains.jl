@@ -1,50 +1,45 @@
 """
-    rectangulardomain(Zb, Ze, Δr)
+    rectangulardomain(zbl, ztr, Δr)
 
-Generate initial mesh node coordinates for a rectangular domain ∈ {`Zb`, `Ze`} with
-initial mesh step `Δr`.
-
-`Ze` should be greater than `Zb`.
+Generate initial mesh node coordinates for a rectangular domain extending from the complex
+bottom left corner `zbl` to the top right corner `ztr` with initial mesh step `Δr`.
 """
-function rectangulardomain(Zb::Complex, Ze::Complex, Δr)
-    rZb, iZb = reim(Zb)
-    rZe, iZe = reim(Ze)
+function rectangulardomain(zbl::Complex, ztr::Complex, Δr)
+    rzbl, izbl = reim(zbl)
+    rztr, iztr = reim(ztr)
 
-    rZb > rZe && throw(ArgumentError("real part of Zb greater than Ze"))
-    iZb > iZe && throw(ArgumentError("imag part of Zb greater than Ze"))
+    X = rztr - rzbl
+    Y = iztr - izbl
 
-    X = rZe - rZb
-    Y = iZe - iZb
+    n = ceil(Int, Y/Δr)
+    dy = Y/n
 
-    n = ceil(Int, Y/Δr + 1)
-    dy = Y/(n-1)
-    half_dy = dy/2
+    ## dx = sqrt(Δr² - (dy/2)²), solved for equilateral triangle
+    m = ceil(Int, X/sqrt(Δr^2 - dy^2/4))
+    dx = X/m
+    half_dx = dx/2
 
-    m = ceil(Int, X/sqrt(Δr^2 - dy^2/4) + 1)
-    dx = X/(m-1)
-
-    # precalculate
-    mn = m*n
-
-    vlength = mn
-    T = promote_type(typeof(Zb), typeof(Ze), typeof(Δr), Float64)
+    T = promote_type(ComplexF64, typeof(zbl), typeof(ztr), typeof(Δr))
     v = Vector{T}()
-    sizehint!(v, vlength)
+    sizehint!(v, (m+1)*(n+1))
 
-    on = false
-    @inbounds for j = 0:m-1, i = 0:n-1
-        x = rZb + dx*j
-        y = iZb + dy*i
+    shift = false  # we will displace every other line by dx/2
+    for j = 0:n
+        y = izbl + dy*j
 
-        if (i+1) == n
-            on = !on
-        end
-        if on
-            y += half_dy
-        end
+        for i = 0:m
+            x = rzbl + dx*i
 
-        if y < iZe || (abs(y - iZe) < sqrt(eps(real(T))))
-            # Can't just check y <= iZe because of floating point limitations
+            if shift && i == 0
+                continue  # otherwise, we shift out of left bound
+            elseif shift
+                x -= half_dx
+            end
+
+            if i == m
+                shift = !shift
+            end
+
             push!(v, complex(x, y))
         end
     end

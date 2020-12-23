@@ -15,7 +15,7 @@ xb = -2  # real part begin
 xe = 2  # real part end
 yb = -2  # imag part begin
 ye = 2  # imag part end
-r = 0.2  # initial mesh step
+r = 0.1999  # initial mesh step
 
 origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 
@@ -64,11 +64,11 @@ params = GRPFParams(100, maxnodes, 3, maxnodes-1, 1e-9, false)
 @test_logs (:warn,"GRPFParams.maxnodes reached") grpf(defaultfcn, origcoords, PlotData(), params)
 
 # Test with big origcoords
-xb = big"-2"  # real part begin
-xe = big"2"  # real part end
-yb = big"-2"  # imag part begin
-ye = big"2"  # imag part end
-r = big"0.2"  # initial mesh step
+xb = big(xb)  # real part begin
+xe = big(xe)  # real part end
+yb = big(yb)  # imag part begin
+ye = big(ye)  # imag part end
+r = big(r)  # initial mesh step
 
 origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 
