@@ -3,6 +3,8 @@
 Important notices about MAJOR and MINOR version releases.
 
 - `v1.4.0`: Provides a new function for preparing data for plotting, `getplotdata`.
+A fix for `rectangulardomain` is also included that, as a side effect, shifts the nodes produced by the old `rectangulardomain` by a half spacing.
+This may cause slightly different root and pole locations from `grpf`.
 
 - `v1.3.0`: `GRPFParams` no longer parameterizes the type of the `tolerance` field and instead it is fixed as `Float64`.
 There is no reason `tolerance` would have been anything other than `Float64` because the precision is limited to `Float64` by the underlying `VoronoiDelaunay.jl` triangulation procedure.
