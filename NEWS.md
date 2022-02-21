@@ -2,6 +2,8 @@
 
 Important notices about MAJOR and MINOR version releases.
 
+- `v1.5.0`: Minimum Julia version now `v1.7`. Removes custom implementation of fast `delaunayedges`.
+
 - `v1.4.0`: Provides a new function for preparing data for plotting, `getplotdata`.
 A fix for `rectangulardomain` is also included that, as a side effect, shifts the nodes produced by the old `rectangulardomain` by a half spacing.
 This may cause slightly different root and pole locations from `grpf`.
