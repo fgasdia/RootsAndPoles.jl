@@ -96,27 +96,3 @@ function sameunique!(v::AbstractVector{DelaunayEdge{IndexablePoint2D}})
 
     deleteat!(v, deleteidxs)
 end
-
-# Improved performance of `delaunayedges()`
-# see: https://github.com/JuliaGeometry/VoronoiDelaunay.jl/issues/47
-function delaunayedges_fast(t::DelaunayTessellation2D{T}) where T <: AbstractPoint2D
-    result = DelaunayEdge{T}[]
-    @inbounds for ix in 2:t._last_trig_index
-        tr = t._trigs[ix]
-        isexternal(tr) && continue
-
-        ix_na = tr._neighbour_a
-        if (ix_na > ix) | isexternal(t._trigs[ix_na])
-            push!(result, DelaunayEdge(getb(tr), getc(tr)))
-        end
-        ix_nb = tr._neighbour_b
-        if (ix_nb > ix) | isexternal(t._trigs[ix_nb])
-            push!(result, DelaunayEdge(geta(tr), getc(tr)))
-        end
-        ix_nc = tr._neighbour_c
-        if (ix_nc > ix) | isexternal(t._trigs[ix_nc])
-            push!(result, DelaunayEdge(geta(tr), getb(tr)))
-        end
-    end
-    return result
-end

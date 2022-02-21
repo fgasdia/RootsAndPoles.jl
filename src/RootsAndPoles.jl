@@ -269,7 +269,7 @@ function candidateedges!(
 
     phasediffs = Vector{Int8}()
 
-    for edge in delaunayedges_fast(tess)
+    for edge in delaunayedges(tess)
         nodea, nodeb = geta(edge), getb(edge)
         idxa, idxb = getindex(nodea), getindex(nodeb)
 
