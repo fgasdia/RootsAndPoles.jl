@@ -152,9 +152,8 @@ Convert complex function value `val` to quadrant number.
 |    3     | π ≤ arg f < 3π/2  |
 |    4     | 3π/2 ≤ arg f < 2π |
 """
-@inline function quadrant(val)::Int8
+@inline function quadrant(val)
     # This function correponds to `vinq.m`
-
     rv, iv = reim(val)
     if (rv > 0) & (iv >= 0)
         return 1
@@ -173,23 +172,15 @@ end
 
 Evaluate function `f` for [`quadrant`](@ref) at `nodes` and fill `quadrants` in-place.
 
-Each element of `quadrants` corresponds to the index of `IndexablePoint2D` in `nodes`.
+Each element of `quadrants` corresponds to the `index` of `IndexablePoint2D` in `nodes`.
 """
-function assignquadrants!(
-    quadrants::Vector{<:Integer},
-    nodes::Vector{IndexablePoint2D},
-    f::ScaledFunction{F,G},
-    multithreading=false
-    ) where {F,G}
-
+function assignquadrants!(quadrants, nodes, f::ScaledFunction{F,G}, multithreading=false) where {F,G}
     if multithreading
-        @threads for ii in eachindex(nodes)
-            p = @inbounds nodes[ii]
+        @threads for p in nodes
             quadrants[getindex(p)] = quadrant(f(p))
         end
     else
-        for ii in eachindex(nodes)
-            p = @inbounds nodes[ii]
+        for p in nodes
             quadrants[getindex(p)] = quadrant(f(p))
         end
     end
@@ -603,7 +594,7 @@ Identify roots and poles of function based on regions and quadrants.
 """
 function rootsandpoles(
     regions::Vector{Vector{IndexablePoint2D}},
-    quadrants::Vector{Int8},
+    quadrants::Vector{Int},
     g2f::Geometry2Function{T}
     ) where T
 
@@ -661,7 +652,7 @@ function tesselate!(
     g2f = f.g2f
 
     E = Vector{DelaunayEdge{IndexablePoint2D}}()
-    quadrants = Vector{Int8}()
+    quadrants = Vector{Int}()
     edge_idxs = Vector{Int}()
     zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
 
@@ -671,7 +662,7 @@ function tesselate!(
 
         # Determine which quadrant function value belongs at each node
         numnewnodes = length(newnodes)
-        append!(quadrants, Vector{Int8}(undef, numnewnodes))
+        append!(quadrants, Vector{Int}(undef, numnewnodes))
         assignquadrants!(quadrants, newnodes, f, params.multithreading)
 
         # Add new nodes to `tess`
