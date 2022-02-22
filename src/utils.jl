@@ -1,8 +1,8 @@
 distance(p1::Complex, p2::Complex) = hypot(p2 - p1)
 distance((p1, p2)::Tuple{Complex, Complex}) = distance(p1, p2)
 function distance(p1::AbstractPoint2D, p2::AbstractPoint2D)
-    z1 = complex(p1._x, p1._y)
-    z2 = complex(p2._x, p2._y)
+    z1 = complex(p1.x, p1.y)
+    z2 = complex(p2.x, p2.y)
     return distance(z1, z2)
 end
 
