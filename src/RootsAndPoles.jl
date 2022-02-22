@@ -41,7 +41,7 @@ const MINCOORD = nextfloat(min_coord, 10)
 """
     GRPFParams
 
-Mutable struct for holding values used by `RootsAndPoles` to stop iterating or split
+Struct for holding values used by `RootsAndPoles` to stop iterating or split
 Delaunay triangles.
 
 Default values are provided by `GRPFParams()`.
@@ -62,7 +62,7 @@ Default values are provided by `GRPFParams()`.
 - `multithreading::Bool = false`: use `Threads.@threads` to run the user-provided function
     `fcn` across the `DelaunayTriangulation`.
 """
-mutable struct GRPFParams
+struct GRPFParams
     maxiterations::Int
     maxnodes::Int
     skinnytriangle::Int
