@@ -246,6 +246,8 @@ end
 
 If `phasediffs` is a `Vector`, then the phase difference across each edge is `push!`ed
 into `phasediffs`. This is useful for plotting.
+
+Both `E` and `phasediffs` are updated in place.
 """
 function candidateedges!(E, phasediffs, tess, quadrants)
     for edge in delaunayedges(tess)
@@ -258,7 +260,7 @@ function candidateedges!(E, phasediffs, tess, quadrants)
         #     idxa, idxb = idxb, idxa
         # end
 
-        @inbounds ΔQ = mod(quadrants[idxa] - quadrants[idxb], 4)  # phase difference
+        ΔQ = mod(quadrants[idxa] - quadrants[idxb], 4)  # phase difference
         if ΔQ == 2
             push!(E, edge)
         end
@@ -421,10 +423,10 @@ The next one (after the reference) is picked from the fixed set of nodes.
     S = g2f(refnode)
 
     minphi = 2π + 1  # max diff of angles is 2π, so this is guaranteed larger
-    minphi_idx = 1
+    minphi_idx = firstindex(nodes)
 
-    for (i, p) in enumerate(nodes)
-        @inbounds N = g2f(p)
+    for i in eachindex(nodes)
+        N = g2f(nodes[i])
 
         SP = P - S
         SN = N - S
@@ -482,15 +484,16 @@ function evaluateregions!(C, g2f)
     # Initialize
     numregions = 1
     regions = [[geta(C[1])]]
-    refnode = getb(C[1])  # type annotated to assist with boxing
+    refnode = getb(C[1])
     popfirst!(C)
 
-    nextedgeidxs = Vector{Int}()
+    nextedgeidxs = similar(Array{Int}, axes(C))
+    empty!(nextedgeidxs)
     while length(C) > 0
 
         # This loop is equivalent to `findall(e->geta(e)==refnode, C)`
         # but avoids closure Core.Box issue
-        @inbounds for i in eachindex(C)
+        for i in eachindex(C)
             if geta(C[i]) == refnode
                 push!(nextedgeidxs, i)
             end
@@ -542,19 +545,19 @@ function rootsandpoles(regions, quadrants, g2f::Geometry2Function{T}) where T
         quadrantsequence = [quadrants[getindex(node)] for node in r]
 
         # Sign flip because `r` are in opposite order of Matlab?
-        dQ = -diff(quadrantsequence)
-        @inbounds for jj in eachindex(dQ)
-            if dQ[jj] == 3
-                dQ[jj] = -1
-            elseif dQ[jj] == -3
-                dQ[jj] = 1
-            elseif abs(dQ[jj]) == 2
+        dquadrantsequence = -diff(quadrantsequence)
+        for dq in dquadrantsequence
+            if dq == 3
+                dq = -1
+            elseif dq == -3
+                dq = 1
+            elseif abs(dq) == 2
                 # ``|ΔQ| = 2`` is ambiguous; cannot tell whether phase increases or
                 # decreases by two quadrants
-                dQ[jj] = 0
+                dq = 0
             end
         end
-        q = sum(dQ)/4
+        q = sum(dquadrantsequence)/4
         z = sum(g2f.(r))/length(r)
 
         if q > 0
