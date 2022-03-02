@@ -155,11 +155,11 @@ Convert complex function value `val` to quadrant number.
 @inline function quadrant(val)
     # This function correponds to `vinq.m`
     rv, iv = reim(val)
-    if (rv > 0) & (iv >= 0)
+    if rv > 0 && iv >= 0
         return 1
-    elseif (rv <= 0) & (iv > 0)
+    elseif rv <= 0 && iv > 0
         return 2
-    elseif (rv < 0) & (iv <= 0)
+    elseif rv < 0 && iv <= 0
         return 3
     else
         # (rv >= 0) & (iv < 0)
@@ -291,7 +291,7 @@ function zone(triangle, edge_idxs)
     zone2 = false
     for idx in edge_idxs
         # with Julia 1.4.2: | is faster than || here
-        if (nai == idx) | (nbi == idx) | (nci == idx)
+        if nai == idx || nbi == idx || nci == idx
             if !zone2
                 # we need to keep searching b/c it might be zone 1
                 zone2 = true
@@ -312,10 +312,8 @@ Compute unique indices `idxs` in-place of all nodes in `edges`.
 """
 function uniqueindices!(idxs, edges)
     empty!(idxs)
-    for i in eachindex(edges)
-        @inbounds ei = edges[i]
-        push!(idxs, getindex(geta(ei)))
-        push!(idxs, getindex(getb(ei)))
+    for e in edges
+        push!(idxs, getindex(geta(e)), getindex(getb(e)))
     end
     sort!(idxs)  # calling `sort!` first makes `unique!` more efficient
     unique!(idxs)
@@ -418,7 +416,7 @@ end
 Find the index of the next node in `nodes` as part of the candidate region boundary process.
 The next one (after the reference) is picked from the fixed set of nodes.
 """
-@inline function findnextnode(prevnode, refnode, nodes, g2f)
+function findnextnode(prevnode, refnode, nodes, g2f)
     P = g2f(prevnode)
     S = g2f(refnode)
 
@@ -459,9 +457,9 @@ function contouredges(tess, edges)
         for edge in edges
             eai, ebi = getindex(geta(edge)), getindex(getb(edge))
 
-            if ((eai == pai) && (ebi == pbi)) | ((eai == pbi) && (ebi == pai)) |
-                ((eai == pbi) && (ebi == pci)) | ((eai == pci) && (ebi == pbi)) |
-                ((eai == pci) && (ebi == pai)) | ((eai == pai) && (ebi == pci))
+            if (eai == pai && ebi == pbi) || (eai == pbi && ebi == pai) ||
+                (eai == pbi && ebi == pci) || (eai == pci && ebi == pbi) ||
+                (eai == pci && ebi == pai) || (eai == pai && ebi == pci)
                 push!(C, DelaunayEdge(pa,pb), DelaunayEdge(pb,pc), DelaunayEdge(pc,pa))
                 break  # only count each triangle once
             end
@@ -545,19 +543,19 @@ function rootsandpoles(regions, quadrants, g2f::Geometry2Function{T}) where T
         quadrantsequence = [quadrants[getindex(node)] for node in r]
 
         # Sign flip because `r` are in opposite order of Matlab?
-        dquadrantsequence = -diff(quadrantsequence)
-        for dq in dquadrantsequence
-            if dq == 3
-                dq = -1
-            elseif dq == -3
-                dq = 1
-            elseif abs(dq) == 2
+        dq = -diff(quadrantsequence)
+        for i in eachindex(dq)
+            if dq[i] == 3
+                dq[i] = -1
+            elseif dq[i] == -3
+                dq[i] = 1
+            elseif abs(dq[i]) == 2
                 # ``|ΔQ| = 2`` is ambiguous; cannot tell whether phase increases or
                 # decreases by two quadrants
-                dq = 0
+                dq[i] = 0
             end
         end
-        q = sum(dquadrantsequence)/4
+        q = sum(dq)/4
         z = sum(g2f.(r))/length(r)
 
         if q > 0
@@ -590,7 +588,7 @@ function tesselate!(tess, newnodes, f::ScaledFunction, params, pd=nothing)
     zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
 
     iteration = 0
-    while (iteration < params.maxiterations) && (numnodes < params.maxnodes)
+    while iteration < params.maxiterations && numnodes < params.maxnodes
         iteration += 1
 
         # Determine which quadrant function value belongs at each node
@@ -634,8 +632,8 @@ function tesselate!(tess, newnodes, f::ScaledFunction, params, pd=nothing)
         setindex!.(newnodes, (1:length(newnodes)).+numnodes)
     end
 
-    (iteration >= params.maxiterations) && @warn "params.maxiterations reached"
-    (numnodes >= params.maxnodes) && @warn "params.maxnodes reached"
+    iteration >= params.maxiterations && @warn "params.maxiterations reached"
+    numnodes >= params.maxnodes && @warn "params.maxnodes reached"
 
     return tess, E, quadrants, phasediffs
 end
