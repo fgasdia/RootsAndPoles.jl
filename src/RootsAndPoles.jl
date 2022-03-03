@@ -41,7 +41,7 @@ const MINCOORD = nextfloat(min_coord, 10)
 """
     GRPFParams
 
-Mutable struct for holding values used by `RootsAndPoles` to stop iterating or split
+Struct for holding values used by `RootsAndPoles` to stop iterating or split
 Delaunay triangles.
 
 Default values are provided by `GRPFParams()`.
@@ -62,7 +62,7 @@ Default values are provided by `GRPFParams()`.
 - `multithreading::Bool = false`: use `Threads.@threads` to run the user-provided function
     `fcn` across the `DelaunayTriangulation`.
 """
-mutable struct GRPFParams
+struct GRPFParams
     maxiterations::Int
     maxnodes::Int
     skinnytriangle::Int
@@ -141,7 +141,7 @@ include("coordinate_domains.jl")
 export rectangulardomain, diskdomain, grpf, PlotData, getplotdata, GRPFParams
 
 """
-    quadrant(val)::Int8
+    quadrant(val)
 
 Convert complex function value `val` to quadrant number.
 
@@ -152,15 +152,14 @@ Convert complex function value `val` to quadrant number.
 |    3     | π ≤ arg f < 3π/2  |
 |    4     | 3π/2 ≤ arg f < 2π |
 """
-@inline function quadrant(val)::Int8
+@inline function quadrant(val)
     # This function correponds to `vinq.m`
-
     rv, iv = reim(val)
-    if (rv > 0) & (iv >= 0)
+    if rv > 0 && iv >= 0
         return 1
-    elseif (rv <= 0) & (iv > 0)
+    elseif rv <= 0 && iv > 0
         return 2
-    elseif (rv < 0) & (iv <= 0)
+    elseif rv < 0 && iv <= 0
         return 3
     else
         # (rv >= 0) & (iv < 0)
@@ -173,23 +172,15 @@ end
 
 Evaluate function `f` for [`quadrant`](@ref) at `nodes` and fill `quadrants` in-place.
 
-Each element of `quadrants` corresponds to the index of `IndexablePoint2D` in `nodes`.
+Each element of `quadrants` corresponds to the `index` of `IndexablePoint2D` in `nodes`.
 """
-function assignquadrants!(
-    quadrants::Vector{<:Integer},
-    nodes::Vector{IndexablePoint2D},
-    f::ScaledFunction{F,G},
-    multithreading=false
-    ) where {F,G}
-
+function assignquadrants!(quadrants, nodes, f::ScaledFunction{F,G}, multithreading=false) where {F,G}
     if multithreading
-        @threads for ii in eachindex(nodes)
-            p = @inbounds nodes[ii]
+        @threads for p in nodes
             quadrants[getindex(p)] = quadrant(f(p))
         end
     else
-        for ii in eachindex(nodes)
-            p = @inbounds nodes[ii]
+        for p in nodes
             quadrants[getindex(p)] = quadrant(f(p))
         end
     end
@@ -199,7 +190,7 @@ end
 """
     candidateedges!(E, tess, quadrants)
 
-Fill in candidate edges `E` that contain a phase change of 2 quadrants.
+Fill in `Vector` of candidate edges `E` that contain a phase change of 2 quadrants.
 
 Any root or pole is located at the point where the regions described by four different
 quadrants meet. Since any triangulation of the four nodes located in the four different
@@ -208,14 +199,9 @@ the vicinity of a root or pole.
 
 `E` is not sorted.
 """
-function candidateedges!(
-    E::Vector{DelaunayEdge{IndexablePoint2D}},
-    tess::DelaunayTessellation2D{IndexablePoint2D},
-    quadrants::Vector{<:Integer}
-    )
-
-    # Better performance compared to `delaunayedges()`
-    # see: https://github.com/JuliaGeometry/VoronoiDelaunay.jl/issues/47
+function candidateedges!(E, tess, quadrants)
+    # 10%+ better performance than even the v0.4.1 `delaunayedges()`
+    # based on: https://github.com/JuliaGeometry/VoronoiDelaunay.jl/issues/47
     @inbounds for ix in 2:tess._last_trig_index
         tr = tess._trigs[ix]
         isexternal(tr) && continue
@@ -225,7 +211,7 @@ function candidateedges!(
         atri, btri, ctri = getindex(atr), getindex(btr), getindex(ctr)
 
         ix_na = tr._neighbour_a
-        if (ix_na > ix) || isexternal(tess._trigs[ix_na])
+        if ix_na > ix || isexternal(tess._trigs[ix_na])
             ΔQ = mod(quadrants[btri] - quadrants[ctri], 4)  # phase difference
             if ΔQ == 2
                 edge = DelaunayEdge(btr, ctr)
@@ -234,7 +220,7 @@ function candidateedges!(
         end
 
         ix_nb = tr._neighbour_b
-        if (ix_nb > ix) || isexternal(tess._trigs[ix_nb])
+        if ix_nb > ix || isexternal(tess._trigs[ix_nb])
             ΔQ = mod(quadrants[atri] - quadrants[ctri], 4)
             if ΔQ == 2
                 edge = DelaunayEdge(atr, ctr)
@@ -243,7 +229,7 @@ function candidateedges!(
         end
 
         ix_nc = tr._neighbour_c
-        if (ix_nc > ix) || isexternal(tess._trigs[ix_nc])
+        if ix_nc > ix || isexternal(tess._trigs[ix_nc])
             ΔQ = mod(quadrants[atri] - quadrants[btri], 4)
             if ΔQ == 2
                 edge = DelaunayEdge(atr, btr)
@@ -256,20 +242,15 @@ function candidateedges!(
 end
 
 """
-    candidateedges!(E, tess, quadrants, ::PlotData)
+    candidateedges!(E, phasediffs, tess, quadrants)
 
-Return candidate edges `E` and the `phasediffs` as a `Vector{Int8}` across each edge.
+If `phasediffs` is a `Vector`, then the phase difference across each edge is `push!`ed
+into `phasediffs`. This is useful for plotting.
+
+Both `E` and `phasediffs` are updated in place.
 """
-function candidateedges!(
-    E::Vector{DelaunayEdge{IndexablePoint2D}},
-    tess::DelaunayTessellation2D{IndexablePoint2D},
-    quadrants::Vector{<:Integer},
-    ::PlotData
-    )
-
-    phasediffs = Vector{Int8}()
-
-    for edge in delaunayedges_fast(tess)
+function candidateedges!(E, phasediffs, tess, quadrants)
+    for edge in delaunayedges(tess)
         nodea, nodeb = geta(edge), getb(edge)
         idxa, idxb = getindex(nodea), getindex(nodeb)
 
@@ -279,30 +260,26 @@ function candidateedges!(
         #     idxa, idxb = idxb, idxa
         # end
 
-        @inbounds ΔQ = mod(quadrants[idxa] - quadrants[idxb], Int8(4))  # phase difference
+        ΔQ = mod(quadrants[idxa] - quadrants[idxb], 4)  # phase difference
         if ΔQ == 2
             push!(E, edge)
         end
 
-        push!(phasediffs, ΔQ)
+        if phasediffs isa Vector
+            push!(phasediffs, ΔQ)
+        end
     end
-
-    return E, phasediffs
 end
 
 """
     zone(triangle, edge_idxs)
 
-Return zone `1` or `2` for `triangle`.
+Return zone `1` or `2` for `DelaunayTriangle` `triangle`.
 
 Zone `1` triangles have more than one node in `edge_idxs`, whereas zone `2` triangles have
 only a single node.
 """
-function zone(
-    triangle::DelaunayTriangle{IndexablePoint2D},
-    edge_idxs::Vector{<:Integer}
-    )
-
+function zone(triangle, edge_idxs)
     na = geta(triangle)
     nb = getb(triangle)
     nc = getc(triangle)
@@ -314,7 +291,7 @@ function zone(
     zone2 = false
     for idx in edge_idxs
         # with Julia 1.4.2: | is faster than || here
-        if (nai == idx) | (nbi == idx) | (nci == idx)
+        if nai == idx || nbi == idx || nci == idx
             if !zone2
                 # we need to keep searching b/c it might be zone 1
                 zone2 = true
@@ -333,15 +310,10 @@ end
 
 Compute unique indices `idxs` in-place of all nodes in `edges`.
 """
-function uniqueindices!(
-    idxs::Vector{<:Integer},
-    edges::Vector{DelaunayEdge{IndexablePoint2D}}
-    )
+function uniqueindices!(idxs, edges)
     empty!(idxs)
-    for i in eachindex(edges)
-        @inbounds ei = edges[i]
-        push!(idxs, getindex(geta(ei)))
-        push!(idxs, getindex(getb(ei)))
+    for e in edges
+        push!(idxs, getindex(geta(e)), getindex(getb(e)))
     end
     sort!(idxs)  # calling `sort!` first makes `unique!` more efficient
     unique!(idxs)
@@ -351,16 +323,12 @@ end
 """
     zone1newnodes!(newnodes, triangles, g2f, tolerance)
 
-Add nodes to `newnodes` in-place if they are in zone 1, i.e. triangles that had more than
+Add nodes (points) to `newnodes` in-place if they are in zone 1, i.e. triangles that had more than
 one node.
-"""
-function zone1newnodes!(
-    newnodes::Vector{IndexablePoint2D},
-    triangles::Vector{DelaunayTriangle{IndexablePoint2D}},
-    g2f::Geometry2Function,
-    tolerance
-    )
 
+`tolerance` is the minimum edge length an edge must have to go in `newnodes`.
+"""
+function zone1newnodes!(newnodes, triangles, g2f, tolerance)
     triangle1 = triangles[1]
     n1a = geta(triangle1)
     n1b = getb(triangle1)
@@ -388,18 +356,11 @@ function zone1newnodes!(
     return nothing
 end
 
-@inline function addnewnode!(
-    newnodes::Vector{IndexablePoint2D},
-    node1::IndexablePoint2D,
-    node2::IndexablePoint2D,
-    g2f::Geometry2Function,
-    tolerance
-    )
-
+@inline function addnewnode!(newnodes, node1, node2, g2f, tolerance)
     if distance(g2f(node1), g2f(node2)) > tolerance
         avgnode = (node1+node2)/2
-        @inbounds for ii in eachindex(newnodes)
-            distance(newnodes[ii], avgnode) < 2*eps() && return nothing
+        for p in newnodes
+            distance(p, avgnode) < 2*eps() && return nothing
         end
         push!(newnodes, avgnode)  # only executed if we haven't already returned
     end
@@ -413,12 +374,7 @@ Add node to `newnodes` for zone 2 ("skinny") triangles.
 
 `skinnytriangle` is the maximum allowed ratio of the longest to shortest side length.
 """
-@inline function zone2newnode!(
-    newnodes::Vector{IndexablePoint2D},
-    triangle::DelaunayTriangle{IndexablePoint2D},
-    skinnytriangle
-    )
-
+@inline function zone2newnode!(newnodes, triangle, skinnytriangle)
     na = geta(triangle)
     nb = getb(triangle)
     nc = getc(triangle)
@@ -431,24 +387,16 @@ Add node to `newnodes` for zone 2 ("skinny") triangles.
         avgnode = (na+nb+nc)/3
         push!(newnodes, avgnode)
     end
-
     return nothing
 end
 
 """
     splittriangles!(zone1triangles, newnodes, tess, edge_idxs, params)
 
-Add zone 2 triangles to `newnodes` and then update vector of zone 1 triangles, which require
+Add zone 2 triangles to `newnodes` and then update `Vector` `zone1triangles`, which require
 special handling.
 """
-function splittriangles!(
-    zone1triangles::Vector{DelaunayTriangle{IndexablePoint2D}},
-    newnodes::AbstractVector,
-    tess::DelaunayTessellation2D{IndexablePoint2D},
-    edge_idxs::Vector{<:Integer},
-    params::GRPFParams
-    )
-
+function splittriangles!(zone1triangles, newnodes, tess, edge_idxs, params)
     empty!(zone1triangles)
     for triangle in tess
         z = zone(triangle, edge_idxs)
@@ -463,26 +411,20 @@ function splittriangles!(
 end
 
 """
-    findnextnode(prevnode, refnode, tempnodes, g2f)
+    findnextnode(prevnode, refnode, nodes, g2f)
 
-Find the index of the next node in the candidate region boundary process. The next one
-(after the reference) is picked from the fixed set of nodes.
+Find the index of the next node in `nodes` as part of the candidate region boundary process.
+The next one (after the reference) is picked from the fixed set of nodes.
 """
-@inline function findnextnode(
-    prevnode::IndexablePoint2D,
-    refnode::IndexablePoint2D,
-    tempnodes::Vector{IndexablePoint2D},
-    g2f::Geometry2Function
-    )
-
+function findnextnode(prevnode, refnode, nodes, g2f)
     P = g2f(prevnode)
     S = g2f(refnode)
 
     minphi = 2π + 1  # max diff of angles is 2π, so this is guaranteed larger
-    minphi_idx = 1
+    minphi_idx = firstindex(nodes)
 
-    for i in eachindex(tempnodes)
-        @inbounds N = g2f(tempnodes[i])
+    for i in eachindex(nodes)
+        N = g2f(nodes[i])
 
         SP = P - S
         SN = N - S
@@ -501,13 +443,9 @@ end
 """
     contouredges(tess, edges)
 
-Find contour edges from all candidate edges.
+Find contour edges from all candidate `edges`.
 """
-function contouredges(
-    tess::DelaunayTessellation2D{IndexablePoint2D},
-    edges::Vector{DelaunayEdge{IndexablePoint2D}}
-    )
-
+function contouredges(tess, edges)
     C = Vector{DelaunayEdge{IndexablePoint2D}}()
     sizehint!(C, length(edges))
 
@@ -519,9 +457,9 @@ function contouredges(
         for edge in edges
             eai, ebi = getindex(geta(edge)), getindex(getb(edge))
 
-            if ((eai == pai) && (ebi == pbi)) | ((eai == pbi) && (ebi == pai)) |
-                ((eai == pbi) && (ebi == pci)) | ((eai == pci) && (ebi == pbi)) |
-                ((eai == pci) && (ebi == pai)) | ((eai == pai) && (ebi == pci))
+            if (eai == pai && ebi == pbi) || (eai == pbi && ebi == pai) ||
+                (eai == pbi && ebi == pci) || (eai == pci && ebi == pbi) ||
+                (eai == pci && ebi == pai) || (eai == pai && ebi == pci)
                 push!(C, DelaunayEdge(pa,pb), DelaunayEdge(pb,pc), DelaunayEdge(pc,pa))
                 break  # only count each triangle once
             end
@@ -537,28 +475,23 @@ end
 """
     evaluateregions!(C, g2f)
 """
-function evaluateregions!(
-    C::Vector{DelaunayEdge{IndexablePoint2D}},
-    g2f::Geometry2Function
-    )
-
+function evaluateregions!(C, g2f)
     # NOTE: The nodes of each region are in reverse order compared to Matlab with respect
     # to their quadrants
 
     # Initialize
     numregions = 1
-
     regions = [[geta(C[1])]]
-
-    refnode = getb(C[1])  # type annotated to assist with boxing
+    refnode = getb(C[1])
     popfirst!(C)
 
-    nextedgeidxs = Vector{Int}()
+    nextedgeidxs = similar(Array{Int}, axes(C))
+    empty!(nextedgeidxs)
     while length(C) > 0
 
         # This loop is equivalent to `findall(e->geta(e)==refnode, C)`
         # but avoids closure Core.Box issue
-        @inbounds for i in eachindex(C)
+        for i in eachindex(C)
             if geta(C[i]) == refnode
                 push!(nextedgeidxs, i)
             end
@@ -599,37 +532,31 @@ end
 """
     rootsandpoles(regions, quadrants, g2f)
 
-Identify roots and poles of function based on regions and quadrants.
+Identify roots and poles of function based on `regions` (usually a `Vector{Vector{IndexablePoint2D}}`)
+and `quadrants`.
 """
-function rootsandpoles(
-    regions::Vector{Vector{IndexablePoint2D}},
-    quadrants::Vector{Int8},
-    g2f::Geometry2Function{T}
-    ) where T
-
-    numregions = length(regions)
-
+function rootsandpoles(regions, quadrants, g2f::Geometry2Function{T}) where T
     complexT = complex(T)
     zroots = Vector{complexT}()
     zpoles = Vector{complexT}()
-    for ii in eachindex(regions)
-        quadrantsequence = [quadrants[getindex(node)] for node in regions[ii]]
+    for r in regions
+        quadrantsequence = [quadrants[getindex(node)] for node in r]
 
-        # Sign flip because `regions[ii]` are in opposite order of Matlab?
-        dQ = -diff(quadrantsequence)
-        @inbounds for jj in eachindex(dQ)
-            if dQ[jj] == 3
-                dQ[jj] = -1
-            elseif dQ[jj] == -3
-                dQ[jj] = 1
-            elseif abs(dQ[jj]) == 2
+        # Sign flip because `r` are in opposite order of Matlab?
+        dq = -diff(quadrantsequence)
+        for i in eachindex(dq)
+            if dq[i] == 3
+                dq[i] = -1
+            elseif dq[i] == -3
+                dq[i] = 1
+            elseif abs(dq[i]) == 2
                 # ``|ΔQ| = 2`` is ambiguous; cannot tell whether phase increases or
                 # decreases by two quadrants
-                dQ[jj] = 0
+                dq[i] = 0
             end
         end
-        q = sum(dQ)/4
-        z = sum(g2f.(regions[ii]))/length(regions[ii])
+        q = sum(dq)/4
+        z = sum(g2f.(r))/length(r)
 
         if q > 0
             push!(zroots, convert(complexT, z))  # convert in case T isn't Float64
@@ -642,18 +569,12 @@ function rootsandpoles(
 end
 
 """
-    tesselate!(tess, newnodes, f, params)
+    tesselate!(tess, newnodes, f::ScaledFunction, params, pd=nothing)
 
 Label quadrants, identify candidate edges, and iteratively split triangles, returning
 the tuple `(tess, E, quadrants)`.
 """
-function tesselate!(
-    tess::DelaunayTessellation2D{IndexablePoint2D},
-    newnodes::Vector{IndexablePoint2D},
-    f::ScaledFunction,
-    params::GRPFParams
-    )
-
+function tesselate!(tess, newnodes, f::ScaledFunction, params, pd=nothing)
     # Initialize
     numnodes = tess._total_points_added
     @assert numnodes == 0
@@ -661,17 +582,18 @@ function tesselate!(
     g2f = f.g2f
 
     E = Vector{DelaunayEdge{IndexablePoint2D}}()
-    quadrants = Vector{Int8}()
+    phasediffs = Vector{Int}()
+    quadrants = Vector{Int}()
     edge_idxs = Vector{Int}()
     zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
 
     iteration = 0
-    while (iteration < params.maxiterations) && (numnodes < params.maxnodes)
+    while iteration < params.maxiterations && numnodes < params.maxnodes
         iteration += 1
 
         # Determine which quadrant function value belongs at each node
         numnewnodes = length(newnodes)
-        append!(quadrants, Vector{Int8}(undef, numnewnodes))
+        append!(quadrants, Vector{Int}(undef, numnewnodes))
         assignquadrants!(quadrants, newnodes, f, params.multithreading)
 
         # Add new nodes to `tess`
@@ -680,73 +602,12 @@ function tesselate!(
 
         # Determine candidate edges that may be near a root or pole
         empty!(E)  # start with a blank E
-        candidateedges!(E, tess, quadrants)
-        isempty(E) && tess, E, quadrants  # no roots or poles found
-
-        # Select candidate edges that are longer than the chosen tolerance
-        selectE = filter(e -> longedge(e, params.tolerance, g2f), E)
-        isempty(selectE) && return tess, E, quadrants
-
-        # return if maximum edge length has reached tolerance
-        maxElength = maximum(distance(g2f(e)) for e in selectE)
-        maxElength < params.tolerance && return tess, E, quadrants
-
-        # Get unique indices of nodes in `edges`
-        uniqueindices!(edge_idxs, selectE)
-
-        # Refine (split) triangles
-        empty!(newnodes)
-        splittriangles!(zone1triangles, newnodes, tess, edge_idxs, params)
-
-        # Add new nodes in zone 1
-        zone1newnodes!(newnodes, zone1triangles, g2f, params.tolerance)
-
-        # Have to assign indexes to new nodes (which are all currently -1)
-        setindex!.(newnodes, (1:length(newnodes)).+numnodes)
-    end
-
-    (iteration >= params.maxiterations) && @warn "GRPFParams.maxiterations reached"
-    (numnodes >= params.maxnodes) && @warn "GRPFParams.maxnodes reached"
-
-    return tess, E, quadrants
-end
-
-function tesselate!(
-    tess::DelaunayTessellation2D{IndexablePoint2D},
-    newnodes::Vector{IndexablePoint2D},
-    f::ScaledFunction,
-    params::GRPFParams,
-    ::PlotData
-    )
-
-    # Initialize
-    numnodes = tess._total_points_added
-    @assert numnodes == 0
-
-    g2f = f.g2f
-
-    E = Vector{DelaunayEdge{IndexablePoint2D}}()
-    quadrants = Vector{Int8}()
-    edge_idxs = Vector{Int}()
-    zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
-
-    iteration = 0
-    let phasediffs
-    while (iteration < params.maxiterations) && (numnodes < params.maxnodes)
-        iteration += 1
-
-        # Determine which quadrant function value belongs at each node
-        numnewnodes = length(newnodes)
-        append!(quadrants, Vector{Int8}(undef, numnewnodes))
-        assignquadrants!(quadrants, newnodes, f, params.multithreading)
-
-        # Add new nodes to `tess`
-        push!(tess, newnodes)
-        numnodes += numnewnodes
-
-        # Determine candidate edges that may be near a root or pole
-        empty!(E)  # always start with a blank E
-        E, phasediffs = candidateedges!(E, tess, quadrants, PlotData())
+        if pd isa PlotData
+            empty!(phasediffs)
+            candidateedges!(E, phasediffs, tess, quadrants)
+        else
+            candidateedges!(E, tess, quadrants)
+        end
         isempty(E) && return tess, E, quadrants, phasediffs  # no roots or poles found
 
         # Select candidate edges that are longer than the chosen tolerance
@@ -771,11 +632,10 @@ function tesselate!(
         setindex!.(newnodes, (1:length(newnodes)).+numnodes)
     end
 
-    (iteration >= params.maxiterations) && @warn "GRPFParams.maxiterations reached"
-    (numnodes >= params.maxnodes) && @warn "GRPFParams.maxnodes reached"
+    iteration >= params.maxiterations && @warn "params.maxiterations reached"
+    numnodes >= params.maxnodes && @warn "params.maxnodes reached"
 
     return tess, E, quadrants, phasediffs
-    end  # let
 end
 
 function setup(origcoords)
@@ -830,13 +690,13 @@ julia> poles
  -2.5363675604239815e-10 - 1.0000000002980232im
 ```
 """
-function grpf(fcn, origcoords::AbstractArray{<:Complex}, params=GRPFParams())
+function grpf(fcn, origcoords, params=GRPFParams())
     newnodes, g2f = setup(origcoords)
     f = ScaledFunction(fcn, g2f)
 
     tess = DelaunayTessellation2D{IndexablePoint2D}(params.tess_sizehint)
 
-    tess, E, quadrants = tesselate!(tess, newnodes, f, params)
+    tess, E, quadrants, _ = tesselate!(tess, newnodes, f, params)
 
     complexT = complex(eltype(g2f))
     isempty(E) && return Vector{complexT}(), Vector{complexT}()
@@ -858,21 +718,11 @@ tesselation `tess`, and the `Geometry2Function` struct `g2f` for converting from
 These additional outputs are primarily for plotting or diagnostics.
 
 # Examples
-```jldoctest
-julia> simplefcn(z) = (z - 1)*(z - im)^2*(z + 1)^3/(z + im)
-
-julia> xb, xe = -2, 2
-
-julia> yb, ye = -2, 2
-
-julia> r = 0.1
-
-julia> origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
-
+```
 julia> roots, poles, quadrants, phasediffs, tess, g2f = grpf(simplefcn, origcoords, PlotData());
 ```
 """
-function grpf(fcn, origcoords::AbstractArray{<:Complex}, ::PlotData, params=GRPFParams())
+function grpf(fcn, origcoords, ::PlotData, params=GRPFParams())
     newnodes, g2f = setup(origcoords)
     f = ScaledFunction(fcn, g2f)
 

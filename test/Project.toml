@@ -5,6 +5,6 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 VoronoiDelaunay = "72f80fcb-8c52-57d9-aff0-40c1a3526986"
 
 [compat]
-SpecialFunctions = "0.10, 1"
-VoronoiDelaunay = "0.4"
-julia = "1.4"
+SpecialFunctions = "1"
+VoronoiDelaunay = "0.4.1"
+julia = "1.7"

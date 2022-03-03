@@ -2,34 +2,34 @@
     IndexablePoint2D <: AbstractPoint2D
 
 A special 2D point type, compatible with `VoronoiDelaunay`, that carries an
-identifying `_index` field.
+identifying `index` field.
 
-By default, `_index` is -1.
+By default, `index` is -1.
 
 See also: `setindex!`, `getindex`
 """
 mutable struct IndexablePoint2D <: AbstractPoint2D
-    _x::Float64
-    _y::Float64
-    _index::Int
+    x::Float64
+    y::Float64
+    index::Int
 end
-IndexablePoint2D(x::Float64, y::Float64) = IndexablePoint2D(x, y, -1)
-getx(p::IndexablePoint2D) = p._x
-gety(p::IndexablePoint2D) = p._y
+IndexablePoint2D(x, y) = IndexablePoint2D(x, y, -1)
+getx(p::IndexablePoint2D) = p.x
+gety(p::IndexablePoint2D) = p.y
 Base.:+(p1::IndexablePoint2D, p2::IndexablePoint2D) = IndexablePoint2D(getx(p1)+getx(p2), gety(p1)+gety(p2), -1)
-Base.:/(p1::IndexablePoint2D, n::Real) = IndexablePoint2D(getx(p1)/n, gety(p1)/n, -1)
+Base.:/(p::IndexablePoint2D, n) = IndexablePoint2D(getx(p)/n, gety(p)/n, -1)
 
 """
     getindex(p::IndexablePoint2D)
 
-Return `_index` field of `p`.
+Return `index` field of `p`.
 """
-Base.getindex(p::IndexablePoint2D) = p._index
+Base.getindex(p::IndexablePoint2D) = p.index
 
 """
     setindex!(p::IndexablePoint2D)
 
-Set the `_index` field of `p`.
+Set the `index` field of `p`.
 
 # Example
 
@@ -45,7 +45,7 @@ julia> getindex(p)
 90
 ```
 """
-Base.setindex!(p::IndexablePoint2D, v::Int) = setfield!(p, :_index, v)
+Base.setindex!(p::IndexablePoint2D, v::Int) = setfield!(p, :index, v)
 
 """
     same(e1::DelaunayEdge{IndexablePoint2D}, e2::DelaunayEdge{IndexablePoint2D})
@@ -60,8 +60,8 @@ distinguish them, use `===`.
     e1 === e2 && return true
 
     # if they're reversed
-    e1a, e1b = geta(e1)._index, getb(e1)._index
-    e2a, e2b = geta(e2)._index, getb(e2)._index
+    e1a, e1b = geta(e1).index, getb(e1).index
+    e2a, e2b = geta(e2).index, getb(e2).index
     (e1a == e2b) && (e1b == e2a) && return true
 
     return false
@@ -95,28 +95,4 @@ function sameunique!(v::AbstractVector{DelaunayEdge{IndexablePoint2D}})
     end
 
     deleteat!(v, deleteidxs)
-end
-
-# Improved performance of `delaunayedges()`
-# see: https://github.com/JuliaGeometry/VoronoiDelaunay.jl/issues/47
-function delaunayedges_fast(t::DelaunayTessellation2D{T}) where T <: AbstractPoint2D
-    result = DelaunayEdge{T}[]
-    @inbounds for ix in 2:t._last_trig_index
-        tr = t._trigs[ix]
-        isexternal(tr) && continue
-
-        ix_na = tr._neighbour_a
-        if (ix_na > ix) | isexternal(t._trigs[ix_na])
-            push!(result, DelaunayEdge(getb(tr), getc(tr)))
-        end
-        ix_nb = tr._neighbour_b
-        if (ix_nb > ix) | isexternal(t._trigs[ix_nb])
-            push!(result, DelaunayEdge(geta(tr), getc(tr)))
-        end
-        ix_nc = tr._neighbour_c
-        if (ix_nc > ix) | isexternal(t._trigs[ix_nc])
-            push!(result, DelaunayEdge(geta(tr), getb(tr)))
-        end
-    end
-    return result
 end
