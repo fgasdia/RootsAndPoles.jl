@@ -1,6 +1,7 @@
 distance(p1::Complex, p2::Complex) = hypot(p2 - p1)
 distance((p1, p2)::Tuple{Complex, Complex}) = distance(p1, p2)
 distance(a::QuadrantPoint, b::QuadrantPoint) = distance(complex(a), complex(b))
+distance((a, b)::Tuple{QuadrantPoint, QuadrantPoint}) = distance(complex(a), complex(b))
 
 """
     getplotdata(tess, quadrants, phasediffs, g2f)

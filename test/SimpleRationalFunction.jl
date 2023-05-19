@@ -9,6 +9,38 @@ yb = -2  # imag part begin
 ye = 2  # imag part end
 r = 0.1  # initial mesh step
 
+
+
+###
+# TEMP
+const RP = RootsAndPoles
+const DT = RP.DelaunayTriangulation
+
+parms = GRPFParams()
+initial_mesh = RP.rectangulardomain(complex(xb, yb), complex(xe, ye), r)
+
+mesh_points = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
+RP.assignquadrants!(mesh_points, simplefcn, false)
+
+E = Set{Tuple{Int, Int}}()  # edges
+selectE = Set{Tuple{Int, Int}}()
+tess = DT.triangulate(mesh_points)
+RP.candidateedges!(E, tess)
+
+maxElength = 0.0
+for e in E
+    d = RP.distance(RP.get_point(tess, e...))
+    println(d)
+    if d > parms.tolerance
+        push!(selectE, e)
+        if d > maxElength
+            maxElength = d
+        end
+    end
+end
+###
+
+
 origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
 
 # matlab results from https://github.com/PioKow/GRPF for comparison

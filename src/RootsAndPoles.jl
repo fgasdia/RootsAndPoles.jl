@@ -133,12 +133,12 @@ function assignquadrants!(points, f, multithreading=false)
     if multithreading
         @threads for p in points
             Q = quadrant(f(complex(p)))
-            setquadrant!(points, Q)
+            setquadrant!(p, Q)
         end
     else
         for p in points
             Q = quadrant(f(complex(p)))
-            setquadrant!(points, Q)
+            setquadrant!(p, Q)
         end
     end
     return nothing
@@ -180,30 +180,8 @@ Return zone `1` or `2` for `DelaunayTriangle` `triangle`.
 Zone `1` triangles have more than one node in `edge_idxs`, whereas zone `2` triangles have
 only a single node.
 """
-function zone(triangle, edge_idxs)
-    na = geta(triangle)
-    nb = getb(triangle)
-    nc = getc(triangle)
+function zone(edge, edge_idxs)
 
-    nai = getindex(na)
-    nbi = getindex(nb)
-    nci = getindex(nc)
-
-    zone2 = false
-    for idx in edge_idxs
-        # with Julia 1.4.2: | is faster than || here
-        if nai == idx || nbi == idx || nci == idx
-            if !zone2
-                # we need to keep searching b/c it might be zone 1
-                zone2 = true
-            else
-                # zone1 = true
-                return 1
-            end
-        end
-    end
-
-    return zone2 ? 2 : 0
 end
 
 """
@@ -283,8 +261,19 @@ Add zone 2 triangles to `mesh_points` and then update `Vector` `zone1triangles`,
 special handling.
 """
 function splittriangles!(zone1triangles, mesh_points, tess, edge_idxs, params)
+
+    # XXX: how is triangle identified - map isn't sorted
+    for (edge, pt) in get_adjacent(tri) # XXX get_adjacent isn't the right function to use
+        zone = 0
+        for e in edge_idxs
+            if e == edge && zone < 2
+                zone += 1
+            end
+        end
+    
+    end
+
     for triangle in tess
-        z = zone(triangle, edge_idxs)  # why not 
 
         if z == 1
             push!(zone1triangles, triangle)
@@ -491,18 +480,18 @@ function tesselate!(initial_mesh, f, params, pd=nothing)
         # Select candidate edges that are longer than the chosen tolerance
         maxElength = 0.0
         for e in E
-            d = distance(get_point(tess, e)...)
+            d = distance(get_point(tess, e...))
             if d > params.tolerance
                 push!(selectE, e)
                 if d > maxElength
-                    d = maxElength
+                    maxElength = d
                 end
             end
         end
         isempty(selectE) && return tess, E, quadrants, phasediffs
 
         # Get unique indices of points in `edges`
-        edge_idxs = Set(Iterators.flatten(selectE))
+        unique_pts = Set(Iterators.flatten(selectE))
 
         # TODO: do splitting/refinement in a dedicated function?
         # Refine (split) triangles
@@ -510,8 +499,8 @@ function tesselate!(initial_mesh, f, params, pd=nothing)
         empty!(zone1triangles)
 
         # TODO: Instead of looping over all triangles, is it possible to more directly
-        # identify which triangles contain the points in edge_idxs?
-        splittriangles!(zone1triangles, mesh_points, tess, edge_idxs, params)
+        # identify which triangles contain the points in unique_pts?
+        splittriangles!(zone1triangles, mesh_points, tess, unique_pts, params)
 
         # Add new nodes in zone 1
         zone1newnodes!(newnodes, zone1triangles, params.tolerance)
