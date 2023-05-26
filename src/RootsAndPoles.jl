@@ -488,7 +488,7 @@ function tesselate!(initial_mesh, f, params, pd=nothing)
                 end
             end
         end
-        isempty(selectE) && return tess, E, quadrants, phasediffs
+        isempty(selectE) && return tess, E, phasediffs
 
         # Get unique indices of points in `edges`
         unique_pts = Set(Iterators.flatten(selectE))

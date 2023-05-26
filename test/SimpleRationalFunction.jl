@@ -38,6 +38,65 @@ for e in E
         end
     end
 end
+
+unique_pts = Set(Iterators.flatten(selectE))
+
+function zone2a(tess, unique_pts, parms)
+    for T in RP.each_triangle(tess)
+        i, j, k = RP.indices(T)
+        zone = 0
+        if i in unique_pts
+            zone += 1
+        end
+        if j in unique_pts
+            zone += 1
+        end
+        if k in unique_pts
+            zone += 1
+        end
+    
+        if zone > 1
+            p, q, r = RP.get_point(tess, i, j, k)
+            l1 = RP.distance(p, q)
+            l2 = RP.distance(p, r)
+            l3 = RP.distance(q, r)
+            if max(l1,l2,l3)/min(l1,l2,l3) > parms.skinnytriangle
+                avgnode = (p + q + r)/3
+                println(avgnode)
+                # push!(newnodes, avgnode)
+            end
+        end
+    end 
+end    
+@benchmark zone2a(tess, unique_pts, parms)
+
+# zone2b appears much faster than zone2a
+function zone2b(tess, unique_pts, parms)
+    tmap = RP.get_adjacent2vertex(tess)
+    for e in unique_pts
+        tris = tmap.adjacent2vertex[e]  # ??? What is correct way to handle the map?
+        for t in tris
+            if t[1] in unique_pts || t[2] in unique_pts
+                # t is a zone 2 triangle
+                p, q, r = RP.get_point(tess, e, t[1], t[2])
+                l1 = RP.distance(p, q)
+                l2 = RP.distance(p, r)
+                l3 = RP.distance(q, r)
+                if max(l1,l2,l3)/min(l1,l2,l3) > parms.skinnytriangle
+                    avgnode = (p + q + r)/3
+                    # if avgnode !in newnodes
+                        println(avgnode)
+                        # push!(newnodes, avgnode)
+                    # end
+                end
+            else
+                # t is a zone 1 triangle
+            end
+        end
+    end
+end
+@benchmark zone2b(tess, unique_pts, parms)
+
 ###
 
 
