@@ -3,6 +3,14 @@ distance((p1, p2)::Tuple{Complex, Complex}) = distance(p1, p2)
 distance(a::QuadrantPoint, b::QuadrantPoint) = distance(complex(a), complex(b))
 distance((a, b)::Tuple{QuadrantPoint, QuadrantPoint}) = distance(complex(a), complex(b))
 
+function sort_edge(p1, p2)
+    if p1 < p2
+        return p1, p2
+    else
+        return p2, p1
+    end
+end
+
 """
     getplotdata(tess, quadrants, phasediffs, g2f)
 

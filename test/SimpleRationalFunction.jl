@@ -72,25 +72,37 @@ end
 
 # zone2b appears much faster than zone2a
 function zone2b(tess, unique_pts, parms)
-    tmap = RP.get_adjacent2vertex(tess)
-    for e in unique_pts
-        tris = tmap.adjacent2vertex[e]  # ??? What is correct way to handle the map?
-        for t in tris
-            if t[1] in unique_pts || t[2] in unique_pts
-                # t is a zone 2 triangle
-                p, q, r = RP.get_point(tess, e, t[1], t[2])
-                l1 = RP.distance(p, q)
-                l2 = RP.distance(p, r)
-                l3 = RP.distance(q, r)
-                if max(l1,l2,l3)/min(l1,l2,l3) > parms.skinnytriangle
-                    avgnode = (p + q + r)/3
-                    # if avgnode !in newnodes
-                        println(avgnode)
-                        # push!(newnodes, avgnode)
-                    # end
+    triangles = Set{DT.triangle_type(tess)}()
+    edges = Set{DT.edge_type(tess)}()
+    for p1 in unique_pts
+        adj2v = RP.get_adjacent2vertex(tess, p1) 
+        for (p2, p3) in adj2v
+            sortedtri = DT.sort_triangle((p1, p2, p3))
+            if sortedtri in triangles
+                continue  # this triangle has already been visited
+            end
+            push!(triangles, sortedtri)
+            p, q, r = RP.get_point(tess, p1, p2, p3)
+
+            if p2 in unique_pts || p3 in unique_pts
+                # (p1, p2, p3) is a zone 1 triangle
+                # Add a new node at the midpoint of each edge of (p1, p2, p3)
+                if !(sort_edge(p1, p2) in edges)
+                    addzone1node!(newnodes, p, q, parms.tolerance)
+                    push!(edges, sort_edge(p1, p2))
+                end
+                if !(sort_edge(p1, p3) in edges)
+                    addzone1node!(newnodes, p, r, parms.tolerance)
+                    push!(edges, sort_edge(p1, p3))
+                end
+                if !(sort_edge(p2, p3) in edges)
+                    addzone1node!(newnodes, q, r, parms.tolerance)
+                    push!(edges, sort_edge(p2, p3))
                 end
             else
-                # t is a zone 1 triangle
+                # (p1, p2, p3) is a zone 2 triangle
+                # Add a new node at the average of (p1, p2, p3) 
+                addzone2node!(newnodes, p, q, r, parms.skinnytriangle)
             end
         end
     end

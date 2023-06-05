@@ -173,82 +173,32 @@ function candidateedges!(E, tess; phasediffs=nothing)
 end
 
 """
-    zone(triangle, edge_idxs)
+    addzone1node!(newnodes, p, q, tolerance)
 
-Return zone `1` or `2` for `DelaunayTriangle` `triangle`.
-
-Zone `1` triangles have more than one node in `edge_idxs`, whereas zone `2` triangles have
-only a single node.
+Push the midpoint of `p` and `q` into `newnodes` if the distance between them is greater
+than `tolerance`.
 """
-function zone(edge, edge_idxs)
-
-end
-
-"""
-    zone1newnodes!(newnodes, triangles, tolerance)
-
-Add nodes (points) to `newnodes` in-place if they are in zone 1, i.e. triangles that had more than
-one node.
-
-`tolerance` is the minimum edge length an edge must have to go in `newnodes`.
-"""
-function zone1newnodes!(newnodes, triangles, tolerance)
-    triangle1 = triangles[1]
-    n1a = geta(triangle1)
-    n1b = getb(triangle1)
-    push!(newnodes, (n1a+n1b)/2)
-
-    @inbounds for ii = 1:length(triangles)-1
-        triangle = triangles[ii]
-        na = geta(triangle)
-        nb = getb(triangle)
-        nc = getc(triangle)
-
-        addnewnode!(newnodes, nb, nc, tolerance)
-        addnewnode!(newnodes, nc, na, tolerance)
-        addnewnode!(newnodes, geta(triangles[ii+1]), getb(triangles[ii+1]), tolerance)
-    end
-    te = triangles[end]
-    na = geta(te)
-    nb = getb(te)
-    nc = getc(te)
-    addnewnode!(newnodes, nb, nc, tolerance)
-    addnewnode!(newnodes, nc, na, tolerance)
-
-    # Remove the first of `newnodes` if the edge is too short
-    distance(n1a, n1b) < tolerance && popfirst!(newnodes)
-    return nothing
-end
-
-@inline function addnewnode!(newnodes, node1, node2, tolerance)
-    if distance(node1, node2) > tolerance
-        avgnode = (node1+node2)/2
-        for p in newnodes
-            distance(p, avgnode) < 2*eps() && return nothing
-        end
-        push!(newnodes, avgnode)  # only executed if we haven't already returned
+@inline function addzone1node!(newnodes, p, q, tolerance)
+    if distance(p, q) > tolerance
+        avgnode = (p + q)/2
+        push!(newnodes, avgnode)
     end
     return nothing
 end
 
 """
-    zone2newnodes!(newnodes, triangle, skinnytriangle)
+    addzone2node!(newnodes, p, q, r, skinnytriangle)
 
-Add node to `newnodes` for zone 2 ("skinny") triangles.
+Push the average of `p`, `q`, and `r` into `newnodes`.
 
 `skinnytriangle` is the maximum allowed ratio of the longest to shortest side length.
 """
-@inline function zone2newnode!(newnodes, triangle, skinnytriangle)
-    na = geta(triangle)
-    nb = getb(triangle)
-    nc = getc(triangle)
-
-    # For skinny triangle check, `geom2fcn` not needed because units cancel out
-    l1 = distance(na, nb)
-    l2 = distance(nb, nc)
-    l3 = distance(nc, na)
+@inline function addzone2node!(newnodes, p, q, r, skinnytriangle)
+    l1 = RP.distance(p, q)
+    l2 = RP.distance(p, r)
+    l3 = RP.distance(q, r)
     if max(l1,l2,l3)/min(l1,l2,l3) > skinnytriangle
-        avgnode = (na+nb+nc)/3
+        avgnode = (p + q + r)/3
         push!(newnodes, avgnode)
     end
     return nothing
@@ -257,31 +207,44 @@ end
 """
     splittriangles!(zone1triangles, mesh_points, tess, edge_idxs, params)
 
-Add zone 2 triangles to `mesh_points` and then update `Vector` `zone1triangles`, which require
-special handling.
+Zone `1` triangles have more than one node in `edge_idxs`, whereas zone `2` triangles have
+only a single node.
 """
-function splittriangles!(zone1triangles, mesh_points, tess, edge_idxs, params)
+function splittriangles!(tess, unique_pts, params)
+    triangles = Set{DT.triangle_type(tess)}()
+    edges = Set{DT.edge_type(tess)}()
+    for p1 in unique_pts
+        adj2v = RP.get_adjacent2vertex(tess, p1) 
+        for (p2, p3) in adj2v
+            sortedtri = DT.sort_triangle((p1, p2, p3))
+            if sortedtri in triangles
+                continue  # this triangle has already been visited
+            end
+            push!(triangles, sortedtri)
+            p, q, r = RP.get_point(tess, p1, p2, p3)
 
-    # XXX: how is triangle identified - map isn't sorted
-    for (edge, pt) in get_adjacent(tri) # XXX get_adjacent isn't the right function to use
-        zone = 0
-        for e in edge_idxs
-            if e == edge && zone < 2
-                zone += 1
+            if p2 in unique_pts || p3 in unique_pts
+                # (p1, p2, p3) is a zone 1 triangle
+                # Add a new node at the midpoint of each edge of (p1, p2, p3)
+                if !(sort_edge(p1, p2) in edges)
+                    addzone1node!(newnodes, p, q, params.tolerance)
+                    push!(edges, sort_edge(p1, p2))
+                end
+                if !(sort_edge(p1, p3) in edges)
+                    addzone1node!(newnodes, p, r, params.tolerance)
+                    push!(edges, sort_edge(p1, p3))
+                end
+                if !(sort_edge(p2, p3) in edges)
+                    addzone1node!(newnodes, q, r, params.tolerance)
+                    push!(edges, sort_edge(p2, p3))
+                end
+            else
+                # (p1, p2, p3) is a zone 2 triangle
+                # Add a new node at the average of (p1, p2, p3) 
+                addzone2node!(newnodes, p, q, r, params.skinnytriangle)
             end
         end
-    
     end
-
-    for triangle in tess
-
-        if z == 1
-            push!(zone1triangles, triangle)
-        elseif z == 2
-            zone2newnode!(mesh_points, triangle, params.skinnytriangle)
-        end
-    end
-    return nothing
 end
 
 """
