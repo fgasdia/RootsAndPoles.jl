@@ -146,7 +146,7 @@ function assignquadrants!(points, f, multithreading=false)
 end
 
 """
-    candidateedges!(E, tess, phasediffs=nothing)
+    candidateedges!(E, tess, pd=nothing)
 
 Fill in `Vector` of candidate edges `E` that contain a phase change of 2 quadrants.
 
@@ -160,15 +160,39 @@ the vicinity of a root or pole.
 
 `E` is not sorted.
 """
-function candidateedges!(E, tess, phasediffs=nothing)
+function candidateedges!(E, tess, pd=nothing)
+    empty!(E)
     for edge in each_solid_edge(tess)
-        a, b = get_point(tess, edge...)
-        ΔQ = mod(getquadrant(a) - getquadrant(b), 4)  # phase difference
-        if ΔQ == 2
-            push!(E, edge)
-        end
-        if !isnothing(phasediffs)
-            push!(phasediffs, ΔQ)
+        _candidateedge!(E, tess, edge)
+    end
+end
+
+function candidateedges!(E, tess, pd::PlotData)
+    empty!(pd.phasediffs)
+    for edge in each_solid_edge(tess)
+        _candidateedge!(E, tess, edge)
+        push!(pd.phasediffs, ΔQ)
+    end
+end
+
+function _candidateedge!(E, tess, edge)
+    a, b = get_point(tess, edge...)
+    ΔQ = mod(getquadrant(a) - getquadrant(b), 4)  # phase difference
+    if ΔQ == 2
+        push!(E, edge)
+    end
+end
+
+function selectedges!(selectE, tess, E)
+    empty!(selectE)
+    maxElength = zero(DT.number_type(tess))
+    for e in E
+        d = distance(get_point(tess, e...))
+        if d > params.tolerance
+            push!(selectE, e)
+            if d > maxElength
+                maxElength = d
+            end
         end
     end
 end
@@ -404,7 +428,7 @@ end
     tesselate!(initial_mesh, f, params, pd=nothing)
 
 Label quadrants, identify candidate edges, and iteratively split triangles, returning
-the tuple `(tess, E, quadrants, phasediffs)`.
+the tuple `(tess, E)`.
 """
 function tesselate!(initial_mesh, f, params, pd::Union{Nothing,PlotData}=nothing)
     E = Set{Tuple{Int, Int}}()  # edges
@@ -421,24 +445,11 @@ function tesselate!(initial_mesh, f, params, pd::Union{Nothing,PlotData}=nothing
         assignquadrants!(mesh_points, f, params.multithreading)
 
         # Determine candidate edges that may be near a root or pole
-        empty!(E)
-        empty!(selectE)
-        pd isa PlotData && empty!(pd.phasediffs)
-        candidateedges!(E, tess; pd.phasediffs)
-    
+        candidateedges!(E, tess, pd)
         isempty(E) && return tess, E  # no roots or poles found
 
         # Select candidate edges that are longer than the chosen tolerance
-        maxElength = zero(DT.number_type(tess))
-        for e in E
-            d = distance(get_point(tess, e...))
-            if d > params.tolerance
-                push!(selectE, e)
-                if d > maxElength
-                    maxElength = d
-                end
-            end
-        end
+        selectedges!(selectE, tess, E)  # TODO: is it worth mutating selectE or should we just return it from the function?
         isempty(selectE) && return tess, E
 
         # Get unique indices of points in `edges`
@@ -449,13 +460,13 @@ function tesselate!(initial_mesh, f, params, pd::Union{Nothing,PlotData}=nothing
         splittriangles!(newnodes, tess, unique_pts, params)
 
         # Add new nodes to `tess`
-        push!(tess, newnodes)
+        # push!(tess, newnodes)
     end
 
     iteration >= params.maxiterations && @warn "params.maxiterations reached"
     numnodes >= params.maxnodes && @warn "params.maxnodes reached"
 
-    return tess, E, quadrants, phasediffs
+    return tess, E
 end
 
 """
@@ -492,7 +503,7 @@ julia> poles
 ```
 """
 function grpf(fcn, initial_mesh, params=GRPFParams())
-    tess, E, quadrants, _ = tesselate!(initial_mesh, fcn, params)
+    tess, E = tesselate!(initial_mesh, fcn, params)
 
     complexT = complex(eltype(g2f))
     isempty(E) && return Vector{complexT}(), Vector{complexT}()
