@@ -89,14 +89,16 @@ function Base.isequal(a::GRPFParams, b::GRPFParams)
 end
 Base.:(==)(a::GRPFParams, b::GRPFParams) = isequal(a,b)
 
-struct PlotData end
+struct PlotData
+    phasediffs::Vector{Int}
+end
 
 # These files need the above structs defined
 include("DelaunayTriangulationExtensions.jl")
 include("utils.jl")
 include("coordinate_domains.jl")
 
-export rectangulardomain, diskdomain, grpf, PlotData, getplotdata, GRPFParams
+export rectangulardomain, diskdomain, grpf, PlotData, GRPFParams
 
 """
     quadrant(z)
@@ -141,16 +143,15 @@ function assignquadrants!(points, f, multithreading=false)
             setquadrant!(p, Q)
         end
     end
-    return nothing
 end
 
 """
-    candidateedges!(E, tess; phasediffs=nothing)
+    candidateedges!(E, tess, phasediffs=nothing)
 
 Fill in `Vector` of candidate edges `E` that contain a phase change of 2 quadrants.
 
 If `phasediffs` is not `nothing`, then push `|ΔQ|` of each edge to `phasediffs`.
-This is useful for plotting
+This is useful for plotting.
 
 Any root or pole is located at the point where the regions described by four different
 quadrants meet. Since any triangulation of the four nodes located in the four different
@@ -159,7 +160,7 @@ the vicinity of a root or pole.
 
 `E` is not sorted.
 """
-function candidateedges!(E, tess; phasediffs=nothing)
+function candidateedges!(E, tess, phasediffs=nothing)
     for edge in each_solid_edge(tess)
         a, b = get_point(tess, edge...)
         ΔQ = mod(getquadrant(a) - getquadrant(b), 4)  # phase difference
@@ -183,7 +184,6 @@ than `tolerance`.
         avgnode = (p + q)/2
         push!(newnodes, avgnode)
     end
-    return nothing
 end
 
 """
@@ -201,16 +201,15 @@ Push the average of `p`, `q`, and `r` into `newnodes`.
         avgnode = (p + q + r)/3
         push!(newnodes, avgnode)
     end
-    return nothing
 end
 
 """
-    splittriangles!(zone1triangles, mesh_points, tess, edge_idxs, params)
+    splittriangles!(newnodes, tess, unique_pts, params)
 
 Zone `1` triangles have more than one node in `edge_idxs`, whereas zone `2` triangles have
 only a single node.
 """
-function splittriangles!(tess, unique_pts, params)
+function splittriangles!(newnodes, tess, unique_pts, params)
     triangles = Set{DT.triangle_type(tess)}()
     edges = Set{DT.edge_type(tess)}()
     for p1 in unique_pts
@@ -313,10 +312,6 @@ end
     evaluateregions!(C)
 """
 function evaluateregions!(C)
-    # NOTE: The nodes of each region are in reverse order compared to Matlab with respect
-    # to their quadrants
-
-    # Initialize
     numregions = 1
     regions = [[geta(C[1])]]
     refnode = getb(C[1])
@@ -411,16 +406,9 @@ end
 Label quadrants, identify candidate edges, and iteratively split triangles, returning
 the tuple `(tess, E, quadrants, phasediffs)`.
 """
-function tesselate!(initial_mesh, f, params, pd=nothing)
+function tesselate!(initial_mesh, f, params, pd::Union{Nothing,PlotData}=nothing)
     E = Set{Tuple{Int, Int}}()  # edges
     selectE = Set{Tuple{Int, Int}}()
-    zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
-
-    if pd isa PlotData
-        phasediffs = Vector{Int}()
-    else
-        phasediffs = nothing
-    end
 
     mesh_points = QuadrantPoints(QuadrantPoint.(initial_mesh))
     # tess = triangulate(mesh_points)
@@ -433,15 +421,15 @@ function tesselate!(initial_mesh, f, params, pd=nothing)
         assignquadrants!(mesh_points, f, params.multithreading)
 
         # Determine candidate edges that may be near a root or pole
-        empty!(E)  # start with a blank E
+        empty!(E)
         empty!(selectE)
-        pd isa PlotData && empty!(phasediffs)
-        candidateedges!(E, tess; phasediffs)
+        pd isa PlotData && empty!(pd.phasediffs)
+        candidateedges!(E, tess; pd.phasediffs)
     
-        isempty(E) && return tess, E, phasediffs  # no roots or poles found
+        isempty(E) && return tess, E  # no roots or poles found
 
         # Select candidate edges that are longer than the chosen tolerance
-        maxElength = 0.0
+        maxElength = zero(DT.number_type(tess))
         for e in E
             d = distance(get_point(tess, e...))
             if d > params.tolerance
@@ -451,22 +439,14 @@ function tesselate!(initial_mesh, f, params, pd=nothing)
                 end
             end
         end
-        isempty(selectE) && return tess, E, phasediffs
+        isempty(selectE) && return tess, E
 
         # Get unique indices of points in `edges`
         unique_pts = Set(Iterators.flatten(selectE))
 
-        # TODO: do splitting/refinement in a dedicated function?
-        # Refine (split) triangles
+        # Refine tesselation
         empty!(mesh_points)
-        empty!(zone1triangles)
-
-        # TODO: Instead of looping over all triangles, is it possible to more directly
-        # identify which triangles contain the points in unique_pts?
-        splittriangles!(zone1triangles, mesh_points, tess, unique_pts, params)
-
-        # Add new nodes in zone 1
-        zone1newnodes!(newnodes, zone1triangles, params.tolerance)
+        splittriangles!(newnodes, tess, unique_pts, params)
 
         # Add new nodes to `tess`
         push!(tess, newnodes)
@@ -522,38 +502,6 @@ function grpf(fcn, initial_mesh, params=GRPFParams())
     zroots, zpoles = rootsandpoles(regions, quadrants)
 
     return zroots, zpoles
-end
-
-"""
-    grpf(fcn, origcoords, ::PlotData, params=GRPFParams())
-
-Variant of `grpf` that returns `quadrants`, `phasediffs`, the `VoronoiDelauany`
-tesselation `tess`, and the `Geometry2Function` struct `g2f` for converting from the
-`VoronoiDelaunay` to function space, in addition to `zroots` and `zpoles`.
-
-These additional outputs are primarily for plotting or diagnostics.
-
-# Examples
-```
-julia> roots, poles, quadrants, phasediffs, tess = grpf(simplefcn, origcoords, PlotData());
-```
-"""
-function grpf(fcn, origcoords, ::PlotData, params=GRPFParams())
-    newnodes = reim.(origcoords)
-
-    tess = DelaunayTessellation2D{IndexablePoint2D}(params.tess_sizehint)
-
-    tess, E, quadrants, phasediffs = tesselate!(tess, fcn, params, PlotData())
-
-    complexT = complex(eltype(g2f))
-    isempty(E) && return (Vector{complexT}(), Vector{complexT}(), quadrants, phasediffs,
-                          tess)
-
-    C = contouredges(tess, E)
-    regions = evaluateregions!(C)
-    zroots, zpoles = rootsandpoles(regions, quadrants)
-
-    return zroots, zpoles, quadrants, phasediffs, tess
 end
 
 end # module
