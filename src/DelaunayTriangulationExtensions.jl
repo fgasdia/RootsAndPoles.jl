@@ -25,3 +25,7 @@ DT.each_point(pts::QuadrantPoints) = pts.points
 DT.number_type(::Type{QuadrantPoints}) = DT.number_type(QuadrantPoint)
 DT.getpoint(pts::QuadrantPoints, i::Integer) = pts.points[i]
 Base.iterate(pts::QuadrantPoints, state...) = Base.iterate(pts.points, state...)
+Base.length(pts::QuadrantPoints) = Base.length(pts.points)
+Base.firstindex(pts::QuadrantPoints) = 1
+Base.lastindex(pts::QuadrantPoints) = length(pts)
+Base.getindex(pts::QuadrantPoints, i::Integer) = pts.points[i]

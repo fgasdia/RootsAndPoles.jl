@@ -435,7 +435,7 @@ function tesselate!(initial_mesh, f, params, pd::Union{Nothing,PlotData}=nothing
     selectE = Set{Tuple{Int, Int}}()
 
     mesh_points = QuadrantPoints(QuadrantPoint.(initial_mesh))
-    # tess = triangulate(mesh_points)
+    tess = triangulate(mesh_points)
 
     iteration = 0
     while iteration < params.maxiterations && num_vertices(tess) < params.maxnodes
@@ -457,10 +457,10 @@ function tesselate!(initial_mesh, f, params, pd::Union{Nothing,PlotData}=nothing
 
         # Refine tesselation
         empty!(mesh_points)
-        splittriangles!(newnodes, tess, unique_pts, params)
+        splittriangles!(mesh_points, tess, unique_pts, params)
 
         # Add new nodes to `tess`
-        # push!(tess, newnodes)
+        add_point!(tess, mesh_points)
     end
 
     iteration >= params.maxiterations && @warn "params.maxiterations reached"

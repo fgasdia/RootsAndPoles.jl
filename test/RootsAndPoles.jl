@@ -50,7 +50,27 @@ function test_functionstructs()
     @test eltype(g2f) == BigFloat
 end
 
+function test_assignquadrants!()
+    pts = [complex(1.5, 0.2), complex(-0.4, 2.0), complex(0.9, -0.3), complex(-3.4, -2.0)]
+    
+    # multithreading = false
+    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(pts))
+    @test iszero(RP.getquadrant.(mesh.points))
+    RP.assignquadrants!(mesh, exp, false)
+    @test RP.getquadrant.(mesh.points) == RP.quadrant.(exp.(pts))
+
+    # multithreading = true
+    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(pts))
+    RP.assignquadrants!(mesh, exp, true)
+    @test RP.getquadrant.(mesh.points) == RP.quadrant.(exp.(pts))
+end
+
+function test_candidateedges!()
+
+end
+
 @testset "RootsAndPoles.jl" begin
     test_GRPFParams()
     test_functionstructs()
+    test_assignquadrants!()
 end
