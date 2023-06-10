@@ -27,6 +27,31 @@ selectE = Set{Tuple{Int, Int}}()
 tess = DT.triangulate(mesh_points)
 RP.candidateedges!(E, tess)
 
+
+
+H(z) = (z + 2)/(z^2 + 1/4)  # zero: -2 and poles: ±im/2
+initial_mesh = rectangulardomain(complex(-3, -1), complex(1, 1), 0.6)
+
+using GLMakie
+scatter(reim.(initial_mesh))
+
+mesh = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
+RP.assignquadrants!(mesh, H, false)
+pts = RP.getquadrant.(RP.each_point(mesh))
+colors = Makie.wong_colors()[1:4]
+f = Figure()
+ax = Axis(f[1, 1], xlabel="Re", ylabel="Im")
+limits!(ax, -3.5, 1.5, -1.2, 1.2)
+scatter!(ax, reim.(initial_mesh), color=colors[pts], markersize=10, label="1")
+elements = [PolyElement(polycolor = colors[i]) for i in 1:4]
+Legend(f[1,2], elements, string.(1:4))
+f
+
+RP.assignquadrants!(mesh_points, H, false)
+newpts = RP.getquadrant.(RP.each_point(mesh_points))
+scatter!(ax, reim.(complex.(mesh_points)), color=colors[newpts], markersize=20, label="2")
+
+
 maxElength = 0.0
 for e in E
     d = RP.distance(RP.get_point(tess, e...))

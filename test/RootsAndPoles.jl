@@ -65,12 +65,52 @@ function test_assignquadrants!()
     @test RP.getquadrant.(mesh.points) == RP.quadrant.(exp.(pts))
 end
 
-function test_candidateedges!()
+# function test_newset()
+#     S = Set{Tuple{Int,Int}}()
+#     for _ in 1:10_000
+#         s = (rand(1:1000), rand(1:1000))
+#         push!(S, s)
+#     end
+#     return S
+# end
 
+# S = Set{Tuple{Int,Int}}(tuple.(rand(1:1000, 10000), rand(1:1000, 10000)))
+# function test_emptyset(S)
+#     empty!(S)
+#     for _ in 1:10_000
+#         s = (rand(1:1000), rand(1:1000))
+#         push!(S, s)
+#     end
+#     return S
+# end
+
+function test_candidateedges!()
+    H(z) = (z + 2)/(z^2 + 1/4)  # zero: -2 and poles: ±im/2
+    
+    initial_mesh = rectangulardomain(complex(-3, -1), complex(1, 1), 0.6)
+    mesh_points = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
+    RP.assignquadrants!(mesh_points, H, false)
+
+    E = Set{Tuple{Int, Int}}()
+    tess = RP.triangulate(mesh_points)
+    RP.candidateedges!(E, tess)
+
+    for e in E
+        a, b = RP.get_point(tess, e...)
+        @test abs(RP.getquadrant(a) - RP.getquadrant(b)) == 2
+    end
+
+    # selectE = Set{Tuple{Int, Int}}()
+    # RP.selectedges!(selectE, tess, E, GRPFParams().tolerance)
+
+    unique_pts = Set(Iterators.flatten(selectE))
+    empty!(mesh_points)  # XXX XXX Doing this clears the points in tess!! Look at DT animation for adding
+    RP.splittriangles!(mesh_points, tess, unique_pts, GRPFParams().tolerance, GRPFParams().skinnytriangle)
 end
 
 @testset "RootsAndPoles.jl" begin
     test_GRPFParams()
     test_functionstructs()
     test_assignquadrants!()
+    test_candidateedges!()
 end

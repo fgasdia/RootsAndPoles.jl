@@ -183,12 +183,12 @@ function _candidateedge!(E, tess, edge)
     end
 end
 
-function selectedges!(selectE, tess, E)
+function selectedges!(selectE, tess, E, tolerance)
     empty!(selectE)
     maxElength = zero(DT.number_type(tess))
     for e in E
         d = distance(get_point(tess, e...))
-        if d > params.tolerance
+        if d > tolerance
             push!(selectE, e)
             if d > maxElength
                 maxElength = d
@@ -205,8 +205,8 @@ than `tolerance`.
 """
 @inline function addzone1node!(newnodes, p, q, tolerance)
     if distance(p, q) > tolerance
-        avgnode = (p + q)/2
-        push!(newnodes, avgnode)
+        avgnode = (complex(p) + complex(q))/2
+        DT.push_point!(newnodes, QuadrantPoint(avgnode))
     end
 end
 
@@ -218,12 +218,12 @@ Push the average of `p`, `q`, and `r` into `newnodes`.
 `skinnytriangle` is the maximum allowed ratio of the longest to shortest side length.
 """
 @inline function addzone2node!(newnodes, p, q, r, skinnytriangle)
-    l1 = RP.distance(p, q)
-    l2 = RP.distance(p, r)
-    l3 = RP.distance(q, r)
+    l1 = distance(p, q)
+    l2 = distance(p, r)
+    l3 = distance(q, r)
     if max(l1,l2,l3)/min(l1,l2,l3) > skinnytriangle
-        avgnode = (p + q + r)/3
-        push!(newnodes, avgnode)
+        avgnode = (complex(p) + complex(q) + complex(r))/3
+        DT.push_point!(newnodes, QuadrantPoint(avgnode))
     end
 end
 
@@ -233,38 +233,38 @@ end
 Zone `1` triangles have more than one node in `edge_idxs`, whereas zone `2` triangles have
 only a single node.
 """
-function splittriangles!(newnodes, tess, unique_pts, params)
+function splittriangles!(newnodes, tess, unique_pts, tolerance, skinnytriangle)
     triangles = Set{DT.triangle_type(tess)}()
     edges = Set{DT.edge_type(tess)}()
     for p1 in unique_pts
-        adj2v = RP.get_adjacent2vertex(tess, p1) 
+        adj2v = get_adjacent2vertex(tess, p1) 
         for (p2, p3) in adj2v
             sortedtri = DT.sort_triangle((p1, p2, p3))
             if sortedtri in triangles
                 continue  # this triangle has already been visited
             end
             push!(triangles, sortedtri)
-            p, q, r = RP.get_point(tess, p1, p2, p3)
+            p, q, r = get_point(tess, p1, p2, p3)
 
             if p2 in unique_pts || p3 in unique_pts
                 # (p1, p2, p3) is a zone 1 triangle
                 # Add a new node at the midpoint of each edge of (p1, p2, p3)
                 if !(sort_edge(p1, p2) in edges)
-                    addzone1node!(newnodes, p, q, params.tolerance)
+                    addzone1node!(newnodes, p, q, tolerance)
                     push!(edges, sort_edge(p1, p2))
                 end
                 if !(sort_edge(p1, p3) in edges)
-                    addzone1node!(newnodes, p, r, params.tolerance)
+                    addzone1node!(newnodes, p, r, tolerance)
                     push!(edges, sort_edge(p1, p3))
                 end
                 if !(sort_edge(p2, p3) in edges)
-                    addzone1node!(newnodes, q, r, params.tolerance)
+                    addzone1node!(newnodes, q, r, tolerance)
                     push!(edges, sort_edge(p2, p3))
                 end
             else
                 # (p1, p2, p3) is a zone 2 triangle
                 # Add a new node at the average of (p1, p2, p3) 
-                addzone2node!(newnodes, p, q, r, params.skinnytriangle)
+                addzone2node!(newnodes, p, q, r, skinnytriangle)
             end
         end
     end
@@ -431,6 +431,8 @@ Label quadrants, identify candidate edges, and iteratively split triangles, retu
 the tuple `(tess, E)`.
 """
 function tesselate!(initial_mesh, f, params, pd::Union{Nothing,PlotData}=nothing)
+    # It's more efficient to `empty!` the sets in the loop than it is to create and allocate
+    # them from scratch
     E = Set{Tuple{Int, Int}}()  # edges
     selectE = Set{Tuple{Int, Int}}()
 
@@ -449,15 +451,16 @@ function tesselate!(initial_mesh, f, params, pd::Union{Nothing,PlotData}=nothing
         isempty(E) && return tess, E  # no roots or poles found
 
         # Select candidate edges that are longer than the chosen tolerance
-        selectedges!(selectE, tess, E)  # TODO: is it worth mutating selectE or should we just return it from the function?
+        selectedges!(selectE, tess, E, params.tolerance)
         isempty(selectE) && return tess, E
 
         # Get unique indices of points in `edges`
         unique_pts = Set(Iterators.flatten(selectE))
 
         # Refine tesselation
+        # XXX: does mesh_points contain the original points even though we empty them???
         empty!(mesh_points)
-        splittriangles!(mesh_points, tess, unique_pts, params)
+        splittriangles!(mesh_points, tess, unique_pts, params.tolerance, params.skinnytriangle)
 
         # Add new nodes to `tess`
         add_point!(tess, mesh_points)
