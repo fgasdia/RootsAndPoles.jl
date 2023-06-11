@@ -1,3 +1,51 @@
+Hfcn(z) = (z + 2)/(z^2 + 1/4)  # zero: -2 and poles: ±im/2
+Hfcn_mesh() = rectangulardomain(complex(-3, -1), complex(1, 1), 0.6)
+
+using GLMakie; Makie.inline!(false)
+function Hfcn_plot()
+    initial_mesh = Hfcn_mesh()
+    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
+    tess = triangulate(mesh)
+    RP.assignquadrants!(get_points(tess), Hfcn, false)
+    pts = RP.getquadrant.(RP.each_point(mesh))
+    colors = Makie.wong_colors()[1:4]
+
+    
+    limits!(ax, -3.5, 1.5, -1.2, 1.2)
+    scatter!(ax, reim.(initial_mesh), color=colors[pts], markersize=10)
+    elements = [PolyElement(polycolor = colors[i]) for i in 1:4]
+    Legend(f[1,2], elements, string.(1:4), label="Quadrant")
+    f
+
+    fig = Figure()
+    ax = Axis(fig[1, 1], xlabel="Re", ylabel="Im")
+    triplot!(ax, tess, triangle_color=colors[pts], point_color=colors[pts])
+
+
+    E = Set{Tuple{Int, Int}}()
+    selectE = Set{Tuple{Int, Int}}()
+    RP.assignquadrants!(get_points(tess), Hfcn, false)
+    RP.candidateedges!(E, tess)
+    RP.selectedges!(selectE, tess, E, GRPFParams().tolerance)
+    unique_pts = Set(Iterators.flatten(selectE))
+    RP.splittriangles!(tess, unique_pts, GRPFParams().tolerance, GRPFParams().skinnytriangle)
+
+    RP.assignquadrants!(get_points(tess), Hfcn, false)
+    triplot!(ax, tess, triangle_color=colors[RP.getquadrant.(get_points(tess))], point_color=colors[pts])
+
+
+
+    scatter!(ax, reim.(initial_mesh), color=colors[pts], markersize=10)
+    elements = [PolyElement(polycolor = colors[i]) for i in 1:4]
+    Legend(f[1,2], elements, string.(1:4), label="Quadrant")
+    f
+
+    RP.assignquadrants!(mesh, Hfcn, false)
+    newpts = RP.getquadrant.(RP.each_point(mesh))
+    scatter!(ax, reim.(complex.(mesh)), color=colors[newpts], markersize=20)
+
+end
+
 function test_GRPFParams()
     ga = GRPFParams()
     gb = GRPFParams(100, 500000, 3, 5000, 1e-9, false)
@@ -51,18 +99,20 @@ function test_functionstructs()
 end
 
 function test_assignquadrants!()
-    pts = [complex(1.5, 0.2), complex(-0.4, 2.0), complex(0.9, -0.3), complex(-3.4, -2.0)]
-    
+    pts = Hfcn_mesh()
+
     # multithreading = false
     mesh = RP.QuadrantPoints(RP.QuadrantPoint.(pts))
-    @test iszero(RP.getquadrant.(mesh.points))
-    RP.assignquadrants!(mesh, exp, false)
-    @test RP.getquadrant.(mesh.points) == RP.quadrant.(exp.(pts))
+    tess = triangulate(mesh)
+    @test iszero(RP.getquadrant.(get_points(tess)))  
+    RP.assignquadrants!(get_points(tess), Hfcn, false)
+    @test RP.getquadrant.(mesh.points) == RP.quadrant.(Hfcn.(pts))
 
     # multithreading = true
     mesh = RP.QuadrantPoints(RP.QuadrantPoint.(pts))
-    RP.assignquadrants!(mesh, exp, true)
-    @test RP.getquadrant.(mesh.points) == RP.quadrant.(exp.(pts))
+    tess = triangulate(mesh)
+    RP.assignquadrants!(tess, Hfcn, true)
+    @test RP.getquadrant.(get_points(tess)) == RP.quadrant.(Hfcn.(pts))
 end
 
 # function test_newset()
@@ -84,15 +134,13 @@ end
 #     return S
 # end
 
-function test_candidateedges!()
-    H(z) = (z + 2)/(z^2 + 1/4)  # zero: -2 and poles: ±im/2
-    
-    initial_mesh = rectangulardomain(complex(-3, -1), complex(1, 1), 0.6)
-    mesh_points = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
-    RP.assignquadrants!(mesh_points, H, false)
+function test_candidateedges!()  
+    initial_mesh = Hfcn_mesh()
+    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
+    tess = RP.triangulate(mesh)
+    RP.assignquadrants!(tess, Hfcn, false)
 
     E = Set{Tuple{Int, Int}}()
-    tess = RP.triangulate(mesh_points)
     RP.candidateedges!(E, tess)
 
     for e in E
@@ -100,12 +148,55 @@ function test_candidateedges!()
         @test abs(RP.getquadrant(a) - RP.getquadrant(b)) == 2
     end
 
-    # selectE = Set{Tuple{Int, Int}}()
-    # RP.selectedges!(selectE, tess, E, GRPFParams().tolerance)
+    # TODO: test the PlotData argument
 
     unique_pts = Set(Iterators.flatten(selectE))
     empty!(mesh_points)  # XXX XXX Doing this clears the points in tess!! Look at DT animation for adding
     RP.splittriangles!(mesh_points, tess, unique_pts, GRPFParams().tolerance, GRPFParams().skinnytriangle)
+end
+
+function test_selectedges!()
+    E = Set{Tuple{Int, Int}}()
+    selectE = Set{Tuple{Int, Int}}()
+    initial_mesh = Hfcn_mesh()
+    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
+    tess = RP.triangulate(mesh)
+    RP.assignquadrants!(tess, Hfcn, false)
+    RP.candidateedges!(E, tess)
+
+    RP.selectedges!(selectE, tess, E, GRPFParams().tolerance)
+    @test selectE == E
+
+    RP.selectedges!(selectE, tess, E, 1)
+    @test isempty(selectE)
+end
+
+function test_addzone1node!()
+    initial_mesh = [0+0im, 1+0im, 1+1im, 0+1im]
+    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
+    tess = RP.triangulate(mesh)
+    RP.addzone1node!(tess, 0+0im, 1+1im, GRPFParams().tolerance)
+    @test 0.5+0.5im in complex.(get_points(tess))
+end
+
+function test_addzone2node!()
+    initial_mesh = [0+0im, 1+0im, 1+1im, 0+1im]
+    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
+    tess = RP.triangulate(mesh)
+    RP.addzone2node!(tess, 0+0im, 1+0im, 1+1im, GRPFParams().tolerance)
+    @test (2/3)+(1/3)im in complex.(get_points(tess))
+end
+
+function test_tesselate!()
+    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(Hfcn_mesh()))
+    tess = RP.triangulate(mesh)
+    params = GRPFParams(5, 5000, 3, 1e-9, false)
+    tess, E = RP.tesselate!(tess, Hfcn, params)
+    
+    # colors = Makie.wong_colors()[1:4]
+    # fig = Figure()
+    # ax = Axis(fig[1, 1], xlabel="Re", ylabel="Im")
+    # triplot!(ax, tess, triangle_color=colors[RP.getquadrant.(get_points(tess))])
 end
 
 @testset "RootsAndPoles.jl" begin
@@ -113,4 +204,6 @@ end
     test_functionstructs()
     test_assignquadrants!()
     test_candidateedges!()
+    test_addzone1node!()
+    test_addzone2node!()
 end

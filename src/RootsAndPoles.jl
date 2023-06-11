@@ -16,16 +16,6 @@ Matlab code is available under MIT license at https://github.com/PioKow/GRPF.
 """
 module RootsAndPoles
 
-#==
-NOTE: Some variable conversions from the original GRPF papers to this code:
-
-| Paper | Code |
-|-------|------|
-|   𝓔   |   E  |
-|   𝐶   |   C  |
-|   ϕ   |  phi |
-==#
-
 import Base
 import Base.Threads.@threads
 using LinearAlgebra
@@ -48,9 +38,6 @@ Default values are provided by `GRPFParams()`.
     returns.
 - `skinnytriangle::Int = 3`: maximum ratio of the longest to shortest side length of
     Delaunay triangles before they are split during `grpf` refinement iterations.
-- `tess_sizehint::Int = 5000`: provide a size hint to the total number of expected nodes in
-    the Delaunay tesselation. Setting this number approximately correct can improve
-    performance.
 - `tolerance::Float64 = 1e-9`: maximum allowed edge length of the tesselation defined in the
     `origcoords` domain before returning.
 - `multithreading::Bool = false`: use `Threads.@threads` to run the user-provided function
@@ -60,26 +47,24 @@ struct GRPFParams
     maxiterations::Int
     maxnodes::Int
     skinnytriangle::Int
-    tess_sizehint::Int
     tolerance::Float64
     multithreading::Bool
 
-    function GRPFParams(maxiterations, maxnodes, skinnytriangle, tess_sizehint, tolerance,
+    function GRPFParams(maxiterations, maxnodes, skinnytriangle, tolerance,
                         multithreading)
-        tess_sizehint > maxnodes && @warn "GRPFParams `tess_sizehint` is greater than `maxnodes`"
-        new(maxiterations, maxnodes, skinnytriangle, tess_sizehint, tolerance, multithreading)
+        new(maxiterations, maxnodes, skinnytriangle, tolerance, multithreading)
     end
 end
 GRPFParams() = GRPFParams(100, 500000, 3, 5000, 1e-9, false)
 
 """
-    GRPFParams(tess_sizehint, tolerance, multithreading=false)
+    GRPFParams(tolerance, multithreading=false)
 
 Convenience function for creating a `GRPFParams` object with the most important parameters,
-`tess_sizehint`, `tolerance`, and `multithreading`.
+`tolerance`, and `multithreading`.
 """
-GRPFParams(tess_sizehint, tolerance, multithreading=false) =
-    GRPFParams(100, 500000, 3, tess_sizehint, tolerance, multithreading)
+GRPFParams(tolerance, multithreading=false) =
+    GRPFParams(100, 500000, 3, tolerance, multithreading)
 
 function Base.isequal(a::GRPFParams, b::GRPFParams)
     for n in fieldnames(GRPFParams)
@@ -103,7 +88,7 @@ export rectangulardomain, diskdomain, grpf, PlotData, GRPFParams
 """
     quadrant(z)
 
-Convert complex function value `z` to quadrant number.
+Convert value `z` to complex plane quadrant number.
 
 | Quadrant |       Phase       |
 |:--------:|:-----------------:|
@@ -112,7 +97,7 @@ Convert complex function value `z` to quadrant number.
 |    3     | π ≤ arg f < 3π/2  |
 |    4     | 3π/2 ≤ arg f < 2π |
 """
-@inline function quadrant(z)
+function quadrant(z)
     r, i = reim(z)
     if r > 0 && i >= 0
         return 1
@@ -129,18 +114,23 @@ end
 """
     assignquadrants!(points, f, multithreading=false)
 
-Evaluate function `f` for [`quadrant`](@ref) at `points` and update each point in-place.
+If the point quadrant is 0, evaluate function `f` for [`quadrant`](@ref) at each of `points`
+and update each point in-place.
 """
 function assignquadrants!(points, f, multithreading=false)
     if multithreading
         @threads for p in points
-            Q = quadrant(f(complex(p)))
-            setquadrant!(p, Q)
+            if getquadrant(p) == 0
+                Q = quadrant(f(complex(p)))
+                setquadrant!(p, Q)
+            end
         end
     else
         for p in points
-            Q = quadrant(f(complex(p)))
-            setquadrant!(p, Q)
+            if getquadrant(p) == 0
+                Q = quadrant(f(complex(p)))
+                setquadrant!(p, Q)
+            end
         end
     end
 end
@@ -185,55 +175,51 @@ end
 
 function selectedges!(selectE, tess, E, tolerance)
     empty!(selectE)
-    maxElength = zero(DT.number_type(tess))
     for e in E
         d = distance(get_point(tess, e...))
         if d > tolerance
             push!(selectE, e)
-            if d > maxElength
-                maxElength = d
-            end
         end
     end
 end
 
 """
-    addzone1node!(newnodes, p, q, tolerance)
+    addzone1node!(tess, p, q, tolerance)
 
-Push the midpoint of `p` and `q` into `newnodes` if the distance between them is greater
+Push the midpoint of `p` and `q` into `tess` if the distance between them is greater
 than `tolerance`.
 """
-@inline function addzone1node!(newnodes, p, q, tolerance)
+function addzone1node!(tess, p, q, tolerance)
     if distance(p, q) > tolerance
         avgnode = (complex(p) + complex(q))/2
-        DT.push_point!(newnodes, QuadrantPoint(avgnode))
+        add_point!(tess, QuadrantPoint(avgnode))
     end
 end
 
 """
-    addzone2node!(newnodes, p, q, r, skinnytriangle)
+    addzone2node!(tess, p, q, r, skinnytriangle)
 
-Push the average of `p`, `q`, and `r` into `newnodes`.
+Push the average of `p`, `q`, and `r` into `tess`.
 
 `skinnytriangle` is the maximum allowed ratio of the longest to shortest side length.
 """
-@inline function addzone2node!(newnodes, p, q, r, skinnytriangle)
+function addzone2node!(tess, p, q, r, skinnytriangle)
     l1 = distance(p, q)
     l2 = distance(p, r)
     l3 = distance(q, r)
     if max(l1,l2,l3)/min(l1,l2,l3) > skinnytriangle
         avgnode = (complex(p) + complex(q) + complex(r))/3
-        DT.push_point!(newnodes, QuadrantPoint(avgnode))
+        add_point!(tess, QuadrantPoint(avgnode))
     end
 end
 
 """
-    splittriangles!(newnodes, tess, unique_pts, params)
+    splittriangles!(tess, unique_pts, tolerance, skinnytriangle)
 
 Zone `1` triangles have more than one node in `edge_idxs`, whereas zone `2` triangles have
 only a single node.
 """
-function splittriangles!(newnodes, tess, unique_pts, tolerance, skinnytriangle)
+function splittriangles!(tess, unique_pts, tolerance, skinnytriangle)
     triangles = Set{DT.triangle_type(tess)}()
     edges = Set{DT.edge_type(tess)}()
     for p1 in unique_pts
@@ -250,21 +236,21 @@ function splittriangles!(newnodes, tess, unique_pts, tolerance, skinnytriangle)
                 # (p1, p2, p3) is a zone 1 triangle
                 # Add a new node at the midpoint of each edge of (p1, p2, p3)
                 if !(sort_edge(p1, p2) in edges)
-                    addzone1node!(newnodes, p, q, tolerance)
+                    addzone1node!(tess, p, q, tolerance)
                     push!(edges, sort_edge(p1, p2))
                 end
                 if !(sort_edge(p1, p3) in edges)
-                    addzone1node!(newnodes, p, r, tolerance)
+                    addzone1node!(tess, p, r, tolerance)
                     push!(edges, sort_edge(p1, p3))
                 end
                 if !(sort_edge(p2, p3) in edges)
-                    addzone1node!(newnodes, q, r, tolerance)
+                    addzone1node!(tess, q, r, tolerance)
                     push!(edges, sort_edge(p2, p3))
                 end
             else
                 # (p1, p2, p3) is a zone 2 triangle
                 # Add a new node at the average of (p1, p2, p3) 
-                addzone2node!(newnodes, p, q, r, skinnytriangle)
+                addzone2node!(tess, p, q, r, skinnytriangle)
             end
         end
     end
@@ -425,30 +411,27 @@ function rootsandpoles(regions, quadrants) where T
 end
 
 """
-    tesselate!(initial_mesh, f, params, pd=nothing)
+    tesselate!(tess, f, params, pd=nothing)
 
 Label quadrants, identify candidate edges, and iteratively split triangles, returning
-the tuple `(tess, E)`.
+the tuple `(tess, E)`. Note that `tess` is modified in-place.
 """
-function tesselate!(initial_mesh, f, params, pd::Union{Nothing,PlotData}=nothing)
+function tesselate!(tess, f, params, pd::Union{Nothing,PlotData}=nothing)
     # It's more efficient to `empty!` the sets in the loop than it is to create and allocate
     # them from scratch
     E = Set{Tuple{Int, Int}}()  # edges
     selectE = Set{Tuple{Int, Int}}()
-
-    mesh_points = QuadrantPoints(QuadrantPoint.(initial_mesh))
-    tess = triangulate(mesh_points)
 
     iteration = 0
     while iteration < params.maxiterations && num_vertices(tess) < params.maxnodes
         iteration += 1
 
         # Evaluate the function `f` for the quadrant at each node
-        assignquadrants!(mesh_points, f, params.multithreading)
+        assignquadrants!(get_points(tess), f, params.multithreading)
 
         # Determine candidate edges that may be near a root or pole
         candidateedges!(E, tess, pd)
-        isempty(E) && return tess, E  # no roots or poles found
+        isempty(E) && return tess, E
 
         # Select candidate edges that are longer than the chosen tolerance
         selectedges!(selectE, tess, E, params.tolerance)
@@ -458,16 +441,15 @@ function tesselate!(initial_mesh, f, params, pd::Union{Nothing,PlotData}=nothing
         unique_pts = Set(Iterators.flatten(selectE))
 
         # Refine tesselation
-        # XXX: does mesh_points contain the original points even though we empty them???
-        empty!(mesh_points)
-        splittriangles!(mesh_points, tess, unique_pts, params.tolerance, params.skinnytriangle)
-
-        # Add new nodes to `tess`
-        add_point!(tess, mesh_points)
+        # TODO: pass pd to store the point at every iteration
+        splittriangles!(tess, unique_pts, params.tolerance, params.skinnytriangle)
     end
 
-    iteration >= params.maxiterations && @warn "params.maxiterations reached"
-    numnodes >= params.maxnodes && @warn "params.maxnodes reached"
+    # Make sure that if new triangles have been added, they have been assigned quadrants
+    assignquadrants!(get_points(tess), f, params.multithreading)
+
+    iteration >= params.maxiterations && @warn "$(iteration) iterations. `params.maxiterations` reached."
+    num_vertices(tess) >= params.maxnodes && @warn "Tesselation has $(num_vertices(tess)) vertices. `params.maxnodes` reached."
 
     return tess, E
 end
@@ -506,6 +488,9 @@ julia> poles
 ```
 """
 function grpf(fcn, initial_mesh, params=GRPFParams())
+    mesh_points = QuadrantPoints(QuadrantPoint.(initial_mesh))
+    tess = triangulate(mesh_points)  # WARN: modifying `mesh_points` modifies `tess`
+    
     tess, E = tesselate!(initial_mesh, fcn, params)
 
     complexT = complex(eltype(g2f))

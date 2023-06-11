@@ -1,11 +1,9 @@
 using Test
 using LinearAlgebra
 using SpecialFunctions
-using VoronoiDelaunay
+using DelaunayTriangulation
 
 using RootsAndPoles
-import RootsAndPoles: IndexablePoint2D
-
 const RP = RootsAndPoles
 
 function approxmatch(A::AbstractArray, B::AbstractArray)
