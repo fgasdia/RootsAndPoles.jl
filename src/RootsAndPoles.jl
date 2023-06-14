@@ -55,7 +55,7 @@ struct GRPFParams
         new(maxiterations, maxnodes, skinnytriangle, tolerance, multithreading)
     end
 end
-GRPFParams() = GRPFParams(100, 500000, 3, 5000, 1e-9, false)
+GRPFParams() = GRPFParams(100, 500000, 3, 1e-9, false)
 
 """
     GRPFParams(tolerance, multithreading=false)
@@ -257,21 +257,43 @@ function splittriangles!(tess, unique_pts, tolerance, skinnytriangle)
 end
 
 """
-    findnextnode(prevnode, refnode, nodes)
+    contouredges(tess, E)
+
+Find contour edges `C` from the edges of triangles containing at least one of candidate
+edges `E`.
+"""
+function contouredges(tess, E)
+    C = Set{DT.edge_type(tess)}()  # automatically allunique
+
+    for e in E
+        v = get_adjacent(tess, e)
+        push!(C, (v, e[1]))
+        push!(C, (v, e[2]))
+        push!(C, (e[1], e[2]))
+    end
+
+    return C
+end
+
+"""
+    findnextpt(prevpt, refpt, nextedges)
 
 Find the index of the next node in `nodes` as part of the candidate region boundary process.
 The next one (after the reference) is picked from the fixed set of nodes.
+
+Determined by the node that has the smallest difference in phase angle between the vector
+from `prevnode` to `refnode` and the vector from the sample node to `refnode`. In other
+words, it chooses the node that makes the least sharp among the possible paths. This traces
+the outside closing contour around the candidate region.
 """
-function findnextnode(prevnode, refnode, nodes)
-    P = prevnode
-    S = refnode
-
+function findnextpt(tess, prevpt, refpt, nextedges)
     minphi = 2π + 1  # max diff of angles is 2π, so this is guaranteed larger
-    minphi_idx = firstindex(nodes)
+    c = first(nextedges)
 
-    for i in eachindex(nodes)
-        N = nodes[i]
-
+    P = complex(get_point(tess, prevpt))
+    S = complex(get_point(tess, refpt))
+    for e in nextedges
+        N = complex(get_point(tess, e[2]))
         SP = P - S
         SN = N - S
 
@@ -279,94 +301,54 @@ function findnextnode(prevnode, refnode, nodes)
 
         if phi < minphi
             minphi = phi
-            minphi_idx = i
+            c = e
         end
     end
 
-    return minphi_idx
+    return c
 end
 
 """
-    contouredges(tess, edges)
+    evaluateregions!(C, tess)
 
-Find contour edges from all candidate `edges`.
+This function breaks C into the subsets Cᵏ for the closing contour surrounding the kth
+candidate region.
+
+Note: this function consumes `C`
 """
-function contouredges(tess, edges)
-    C = Vector{DelaunayEdge{IndexablePoint2D}}()
-    sizehint!(C, length(edges))
-
-    # Edges of triangles that contain at least 1 of `edges`
-    for triangle in tess
-        pa, pb, pc = geta(triangle), getb(triangle), getc(triangle)
-        pai, pbi, pci = getindex(pa), getindex(pb), getindex(pc)
-
-        for edge in edges
-            eai, ebi = getindex(geta(edge)), getindex(getb(edge))
-
-            if (eai == pai && ebi == pbi) || (eai == pbi && ebi == pai) ||
-                (eai == pbi && ebi == pci) || (eai == pci && ebi == pbi) ||
-                (eai == pci && ebi == pai) || (eai == pai && ebi == pci)
-                push!(C, DelaunayEdge(pa,pb), DelaunayEdge(pb,pc), DelaunayEdge(pc,pa))
-                break  # only count each triangle once
-            end
-        end
-    end
-
-    # Remove duplicate edges
-    sameunique!(C)
-
-    return C
-end
-
-"""
-    evaluateregions!(C)
-"""
-function evaluateregions!(C)
+function evaluateregions!(C, tess)
     numregions = 1
-    regions = [[geta(C[1])]]
-    refnode = getb(C[1])
-    popfirst!(C)
 
-    nextedgeidxs = similar(Array{Int}, axes(C))
-    empty!(nextedgeidxs)
+    c = first(C)
+    regions = [[c[1]]]
+    refpt = c[2]
+    delete!(C, c)
+
     while length(C) > 0
+        nextedges = collect(Iterators.filter(v->v[1] == refpt, C))
 
-        # This loop is equivalent to `findall(e->geta(e)==refnode, C)`
-        # but avoids closure Core.Box issue
-        for i in eachindex(C)
-            if geta(C[i]) == refnode
-                push!(nextedgeidxs, i)
+        if isempty(nextedges)
+            push!(regions[numregions], refpt)
+            if length(C) > 0
+                c = first(C)
+                numregions += 1
+                push!(regions, [c[1]])
+                refpt = c[2]
+                delete!(C, c) 
             end
-        end
-
-        if !isempty(nextedgeidxs)
-            if length(nextedgeidxs) == 1
-                nextedgeidx = only(nextedgeidxs)
+        else
+            if length(nextedges) > 1
+                prevpt = regions[numregions][end]
+                c = findnextpt(tess, prevpt, refpt, nextedges)
             else
-                prevnode = regions[numregions][end]
-                tempnodes = getb.(C[nextedgeidxs])
-                idx = findnextnode(prevnode, refnode, tempnodes)
-                nextedgeidx = nextedgeidxs[idx]
+                c = only(nextedges)
             end
-
-            nextedge = C[nextedgeidx]
-            push!(regions[numregions], geta(nextedge))
-            refnode = getb(nextedge)
-            deleteat!(C, nextedgeidx)
-        else # isempty
-            push!(regions[numregions], refnode)
-            # New region
-            numregions += 1
-            push!(regions, [geta(C[1])])
-            refnode = getb(C[1])
-            popfirst!(C)
+            push!(regions[numregions], c[1])
+            refpt = c[2]
+            delete!(C, c)
         end
-
-        # reset `nextedgeidxs`
-        empty!(nextedgeidxs)
     end
-
-    push!(regions[numregions], refnode)
+    push!(regions[numregions], refpt)
 
     return regions
 end
@@ -374,8 +356,7 @@ end
 """
     rootsandpoles(regions, quadrants)
 
-Identify roots and poles of function based on `regions` (usually a `Vector{Vector{IndexablePoint2D}}`)
-and `quadrants`.
+Identify roots and poles of function based on `regions` and `quadrants`.
 """
 function rootsandpoles(regions, quadrants) where T
     complexT = complex(T)
@@ -411,23 +392,23 @@ function rootsandpoles(regions, quadrants) where T
 end
 
 """
-    tesselate!(tess, f, params, pd=nothing)
+    tesselate!(tess, fcn, params, pd=nothing)
 
 Label quadrants, identify candidate edges, and iteratively split triangles, returning
 the tuple `(tess, E)`. Note that `tess` is modified in-place.
 """
-function tesselate!(tess, f, params, pd::Union{Nothing,PlotData}=nothing)
+function tesselate!(tess, fcn, params, pd::Union{Nothing,PlotData}=nothing)
     # It's more efficient to `empty!` the sets in the loop than it is to create and allocate
     # them from scratch
-    E = Set{Tuple{Int, Int}}()  # edges
-    selectE = Set{Tuple{Int, Int}}()
+    E = Set{DT.edge_type(tess)}()  # edges
+    selectE = Set{DT.edge_type(tess)}()
 
     iteration = 0
     while iteration < params.maxiterations && num_vertices(tess) < params.maxnodes
         iteration += 1
 
-        # Evaluate the function `f` for the quadrant at each node
-        assignquadrants!(get_points(tess), f, params.multithreading)
+        # Evaluate the function `fcn` for the quadrant at each node
+        assignquadrants!(get_points(tess), fcn, params.multithreading)
 
         # Determine candidate edges that may be near a root or pole
         candidateedges!(E, tess, pd)
@@ -445,8 +426,8 @@ function tesselate!(tess, f, params, pd::Union{Nothing,PlotData}=nothing)
         splittriangles!(tess, unique_pts, params.tolerance, params.skinnytriangle)
     end
 
-    # Make sure that if new triangles have been added, they have been assigned quadrants
-    assignquadrants!(get_points(tess), f, params.multithreading)
+    # Assign quadrants to triangles split at end of last loop
+    assignquadrants!(get_points(tess), fcn, params.multithreading)
 
     iteration >= params.maxiterations && @warn "$(iteration) iterations. `params.maxiterations` reached."
     num_vertices(tess) >= params.maxnodes && @warn "Tesselation has $(num_vertices(tess)) vertices. `params.maxnodes` reached."
@@ -489,12 +470,12 @@ julia> poles
 """
 function grpf(fcn, initial_mesh, params=GRPFParams())
     mesh_points = QuadrantPoints(QuadrantPoint.(initial_mesh))
-    tess = triangulate(mesh_points)  # WARN: modifying `mesh_points` modifies `tess`
+    tess = triangulate(mesh_points)  # WARN: modifying `mesh_points` modifies `tess` in place
     
-    tess, E = tesselate!(initial_mesh, fcn, params)
+    tess, E = tesselate!(tess, fcn, params)
 
-    complexT = complex(eltype(g2f))
-    isempty(E) && return Vector{complexT}(), Vector{complexT}()
+    # TODO: test for type stability when no roots or poles in domain of initial_mesh
+    isempty(E) && return Vector{eltype(initial_mesh)}(), Vector{eltype(initial_mesh)}()
 
     C = contouredges(tess, E)
     regions = evaluateregions!(C)

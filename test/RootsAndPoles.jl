@@ -117,18 +117,18 @@ end
 
 # function test_newset()
 #     S = Set{Tuple{Int,Int}}()
-#     for _ in 1:10_000
-#         s = (rand(1:1000), rand(1:1000))
+#     for _ in 1:100
+#         s = (rand(1:100), rand(1:100))
 #         push!(S, s)
 #     end
 #     return S
 # end
 
-# S = Set{Tuple{Int,Int}}(tuple.(rand(1:1000, 10000), rand(1:1000, 10000)))
+# S = Set{Tuple{Int,Int}}(tuple.(rand(1:100, 100), rand(1:100, 100)))
 # function test_emptyset(S)
 #     empty!(S)
-#     for _ in 1:10_000
-#         s = (rand(1:1000), rand(1:1000))
+#     for _ in 1:100
+#         s = (rand(1:100), rand(1:100))
 #         push!(S, s)
 #     end
 #     return S
@@ -193,10 +193,51 @@ function test_tesselate!()
     params = GRPFParams(5, 5000, 3, 1e-9, false)
     tess, E = RP.tesselate!(tess, Hfcn, params)
     
-    # colors = Makie.wong_colors()[1:4]
-    # fig = Figure()
-    # ax = Axis(fig[1, 1], xlabel="Re", ylabel="Im")
+    colors = Makie.wong_colors()[1:4]
+    fig = Figure()
+    ax = Axis(fig[1, 1], xlabel="Re", ylabel="Im")
+    triplot!(ax, tess, triangle_color=colors[RP.getquadrant.(get_points(tess))])
+end
+
+function test_contouredges()
+    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(Hfcn_mesh()))
+    tess = RP.triangulate(mesh)
+    tess, E = RP.tesselate!(tess, Hfcn, GRPFParams(30, 5000, 3, 1e-3, false))
+    C = RP.contouredges(tess, E)
+
+    colors = Makie.wong_colors()[1:4]
+    fig = Figure()
+    ax = Axis(fig[1, 1], xlabel="Re", ylabel="Im")
     # triplot!(ax, tess, triangle_color=colors[RP.getquadrant.(get_points(tess))])
+    for c in C
+        x1, y1 = reim(complex(get_point(tess, c[1])))
+        x2, y2 = reim(complex(get_point(tess, c[2])))
+        println(x1," ", y1)
+        println(x2," ", y2)
+        lines!(ax, [x1, x2], [y1, y2])
+    end
+end
+
+function test_evaluateregions()
+    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(Hfcn_mesh()))
+    tess = RP.triangulate(mesh)
+    tess, E = RP.tesselate!(tess, Hfcn, GRPFParams(30, 5000, 3, 1e-3, false))
+    C = RP.contouredges(tess, E)
+
+    #
+    numregions = 1
+
+    c = first(C)
+    regions = [[c[1]]]
+    refpt = c[2]
+    delete!(C, c)
+
+    nextedges = collect(Iterators.filter(v->v[1] == refpt, C))
+    prevpt = regions[numregions][end]
+    RP.findnextpt(tess, prevpt, refpt, nextedges)
+    #
+
+    regions = RP.evaluateregions!(C, tess)
 end
 
 @testset "RootsAndPoles.jl" begin
