@@ -138,7 +138,7 @@ function test_candidateedges!()
     initial_mesh = Hfcn_mesh()
     mesh = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
     tess = RP.triangulate(mesh)
-    RP.assignquadrants!(tess, Hfcn, false)
+    RP.assignquadrants!(get_points(tess), Hfcn, false)
 
     E = Set{Tuple{Int, Int}}()
     RP.candidateedges!(E, tess)
@@ -161,7 +161,7 @@ function test_selectedges!()
     initial_mesh = Hfcn_mesh()
     mesh = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
     tess = RP.triangulate(mesh)
-    RP.assignquadrants!(tess, Hfcn, false)
+    RP.assignquadrants!(get_points(tess), Hfcn, false)
     RP.candidateedges!(E, tess)
 
     RP.selectedges!(selectE, tess, E, GRPFParams().tolerance)
@@ -209,6 +209,7 @@ function test_contouredges()
     fig = Figure()
     ax = Axis(fig[1, 1], xlabel="Re", ylabel="Im")
     # triplot!(ax, tess, triangle_color=colors[RP.getquadrant.(get_points(tess))])
+
     for c in C
         x1, y1 = reim(complex(get_point(tess, c[1])))
         x2, y2 = reim(complex(get_point(tess, c[2])))
@@ -216,6 +217,7 @@ function test_contouredges()
         println(x2," ", y2)
         lines!(ax, [x1, x2], [y1, y2])
     end
+    fig
 end
 
 function test_evaluateregions()

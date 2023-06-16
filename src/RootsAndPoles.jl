@@ -263,13 +263,38 @@ Find contour edges `C` from the edges of triangles containing at least one of ca
 edges `E`.
 """
 function contouredges(tess, E)
-    C = Set{DT.edge_type(tess)}()  # automatically allunique
+    C = Set{DT.edge_type(tess)}()
 
     for e in E
         v = get_adjacent(tess, e)
-        push!(C, (v, e[1]))
-        push!(C, (v, e[2]))
-        push!(C, (e[1], e[2]))
+
+        # If an edge occurs twice, that is because it is an edge shared by multiple triangles
+        # and by definition is not an edge on the boundary of the candidate region.
+        # Therefore, if an edge we come to is already in C, delete it.
+        if (v, e[1]) in C
+            delete!(C, (v, e[1]))
+        elseif (e[1], v) in C
+            # We need to check both edge orientations (a, b) and (b, a)
+            delete!(C, (e[1], v))
+        else
+            push!(C, (v, e[1]))
+        end
+
+        if (v, e[2]) in C
+            delete!(C, (v, e[2]))
+        elseif (e[2], v) in C
+            delete!(C, (e[2], v))
+        else
+            push!(C, (v, e[2]))
+        end
+
+        if e in C
+            delete!(C, e)
+        elseif reverse(e) in C
+            delete!(C, reverse(e))
+        else
+            push!(C, e)
+        end
     end
 
     return C
@@ -353,6 +378,24 @@ function evaluateregions!(C, tess)
     return regions
 end
 
+
+function evaluateregions(tess, C)
+    regions = Vector{Vector{edge_type(tess)}}()
+    assigned = Set{edge_type(tess)}()
+    for c in C
+        if !(c in assigned)
+            for r in regions
+                # XXX: `isdisjoint` isn't good enough - we need the countour edges ordered so we can apply DCAP
+                if !isdisjoint(c, Iterators.flatten(r))
+                    # `c` contains a vertex that is already in region `r`, so lets add it
+                    # to the region
+                    push!(r, c)
+                end
+            end
+        end
+    end
+end
+
 """
     rootsandpoles(regions, quadrants)
 
@@ -410,6 +453,7 @@ function tesselate!(tess, fcn, params, pd::Union{Nothing,PlotData}=nothing)
         assignquadrants!(get_points(tess), fcn, params.multithreading)
 
         # Determine candidate edges that may be near a root or pole
+        # Candidate edges are those where the phase change |ΔQ| = 2
         candidateedges!(E, tess, pd)
         isempty(E) && return tess, E
 
