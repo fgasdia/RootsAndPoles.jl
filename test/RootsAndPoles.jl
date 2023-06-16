@@ -237,6 +237,7 @@ function test_evaluateregions()
     RP.findnextpt(tess, prevpt, refpt, nextedges)
     #
 
+    # XXX: evaluateregions currently fails code_warntype
     regions = RP.evaluateregions!(C, tess)
 end
 

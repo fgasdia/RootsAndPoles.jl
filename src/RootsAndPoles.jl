@@ -358,12 +358,11 @@ end
 
 Identify roots and poles of function based on `regions` and `quadrants`.
 """
-function rootsandpoles(regions, quadrants) where T
-    complexT = complex(T)
-    zroots = Vector{complexT}()
-    zpoles = Vector{complexT}()
+function rootsandpoles(tess, regions)
+    zroots = Vector{complex(number_type(tess))}()
+    zpoles = similar(zroots)
     for r in regions
-        quadrantsequence = [quadrants[getindex(node)] for node in r]
+        quadrantsequence = [complex(get_point(tess, p)) for p in r]
 
         # Sign flip because `r` are in opposite order of Matlab?
         dq = -diff(quadrantsequence)
