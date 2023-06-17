@@ -266,7 +266,7 @@ function contouredges(tess, E)
     C = Set{DT.edge_type(tess)}()
 
     for e in E
-        v = get_adjacent(tess, e)
+        v = get_adjacent(tess, e)  # (e[1], e[2], v) is a positively oriented triangle
 
         # If an edge occurs twice, that is because it is an edge shared by multiple triangles
         # and by definition is not an edge on the boundary of the candidate region.
@@ -285,13 +285,13 @@ function contouredges(tess, E)
         elseif (e[2], v) in C
             delete!(C, (e[2], v))
         else
-            push!(C, (v, e[2]))
+            push!(C, (e[2], v))
         end
 
         if e in C
             delete!(C, e)
-        elseif reverse(e) in C
-            delete!(C, reverse(e))
+        elseif (e[2], e[1]) in C
+            delete!(C, (e[2], e[1]))
         else
             push!(C, e)
         end
@@ -301,7 +301,7 @@ function contouredges(tess, E)
 end
 
 """
-    findnextpt(prevpt, refpt, nextedges)
+    findnextpt(tess, prevpt, refpt, nextedges)
 
 Find the index of the next node in `nodes` as part of the candidate region boundary process.
 The next one (after the reference) is picked from the fixed set of nodes.
@@ -317,15 +317,24 @@ function findnextpt(tess, prevpt, refpt, nextedges)
 
     P = complex(get_point(tess, prevpt))
     S = complex(get_point(tess, refpt))
+    SP = P - S
+    aSP = angle(SP)
+
     for e in nextedges
-        N = complex(get_point(tess, e[2]))
-        SP = P - S
-        SN = N - S
+        N1 = complex(get_point(tess, e[1]))
+        N2 = complex(get_point(tess, e[2]))
+        
+        SN1 = N1 - S
+        SN2 = N2 - S
 
-        phi = mod2pi(angle(SP) - angle(SN))
+        phi1 = mod2pi(aSP - angle(SN1))
+        phi2 = mod2pi(aSP - angle(SN2))
 
-        if phi < minphi
-            minphi = phi
+        if phi1 < minphi
+            minphi = phi1
+            c = e
+        elseif phi2 < minphi
+            minphi = phi2
             c = e
         end
     end
@@ -342,58 +351,57 @@ candidate region.
 Note: this function consumes `C`
 """
 function evaluateregions!(C, tess)
-    numregions = 1
-
     c = first(C)
     regions = [[c[1]]]
     refpt = c[2]
+    numregions = 1
     delete!(C, c)
 
+    nextedges = Vector{DT.edge_type(tess)}()
     while length(C) > 0
-        nextedges = collect(Iterators.filter(v->v[1] == refpt, C))
+        # Writing out the for loop avoids a Core.box closure issue with `refpt`
+        # nextedges = [c for c in C if refpt in c]
+        for c in C
+            if refpt in c
+                push!(nextedges, c)
+            end
+        end
 
         if isempty(nextedges)
+            # Contour has closed
             push!(regions[numregions], refpt)
-            if length(C) > 0
-                c = first(C)
-                numregions += 1
-                push!(regions, [c[1]])
-                refpt = c[2]
-                delete!(C, c) 
-            end
+            
+            # Begin the next contour region
+            c = first(C)
+            numregions += 1
+            push!(regions, [c[1]])
+            refpt = c[2]
+            delete!(C, c)
         else
             if length(nextedges) > 1
-                prevpt = regions[numregions][end]
+                # Note: very rare - two triangles share a vertex (but not an edge)
+                prevpt = last(regions[numregions])
                 c = findnextpt(tess, prevpt, refpt, nextedges)
+                ### TEMP XXX
+                @info "length(nextedges) = $(length(nextedges))"
             else
                 c = only(nextedges)
             end
-            push!(regions[numregions], c[1])
-            refpt = c[2]
+
+            if c[1] == refpt 
+                push!(regions[numregions], c[1])
+                refpt = c[2]
+            elseif c[2] == refpt
+                push!(regions[numregions], c[2])
+                refpt = c[1]
+            end
             delete!(C, c)
         end
+        empty!(nextedges)
     end
     push!(regions[numregions], refpt)
 
     return regions
-end
-
-
-function evaluateregions(tess, C)
-    regions = Vector{Vector{edge_type(tess)}}()
-    assigned = Set{edge_type(tess)}()
-    for c in C
-        if !(c in assigned)
-            for r in regions
-                # XXX: `isdisjoint` isn't good enough - we need the countour edges ordered so we can apply DCAP
-                if !isdisjoint(c, Iterators.flatten(r))
-                    # `c` contains a vertex that is already in region `r`, so lets add it
-                    # to the region
-                    push!(r, c)
-                end
-            end
-        end
-    end
 end
 
 """
