@@ -111,10 +111,6 @@ function test_candidateedges!()
     end
 
     # TODO: test the PlotData argument
-
-    unique_pts = Set(Iterators.flatten(selectE))
-    empty!(mesh_points)  # XXX XXX Doing this clears the points in tess!! Look at DT animation for adding
-    RP.splittriangles!(mesh_points, tess, unique_pts, GRPFParams().tolerance, GRPFParams().skinnytriangle)
 end
 
 function test_selectedges!()

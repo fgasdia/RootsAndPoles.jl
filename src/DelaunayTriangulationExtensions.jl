@@ -1,11 +1,11 @@
-mutable struct QuadrantPoint{T<:Real}
+mutable struct QuadrantPoint{T<:AbstractFloat}
     const x::T
     const y::T
     q::Int
 end
-QuadrantPoint(x, y) = QuadrantPoint(x, y, 0)
+QuadrantPoint(x, y) = QuadrantPoint(float(x), float(y), 0)
 QuadrantPoint(xy::Tuple) = QuadrantPoint(xy...)
-QuadrantPoint(xy::Complex) = QuadrantPoint(real(xy), imag(xy), 0)
+QuadrantPoint(xy::Complex) = QuadrantPoint(real(xy), imag(xy))
 
 struct QuadrantPoints{T}
     points::Vector{QuadrantPoint{T}}
