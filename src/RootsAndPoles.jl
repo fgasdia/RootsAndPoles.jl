@@ -18,7 +18,6 @@ module RootsAndPoles
 
 import Base
 import Base.Threads.@threads
-using LinearAlgebra
 using DelaunayTriangulation
 const DT = DelaunayTriangulation
 
@@ -88,7 +87,7 @@ export rectangulardomain, diskdomain, grpf, PlotData, GRPFParams
 """
     quadrant(z)
 
-Convert value `z` to complex plane quadrant number.
+Return complex plane quadrant of number `z`.
 
 | Quadrant |       Phase       |
 |:--------:|:-----------------:|
@@ -136,28 +135,29 @@ function assignquadrants!(points, f, multithreading=false)
 end
 
 """
-    candidateedges!(E, tess, pd=nothing)
+    candidateedges!(E, tess, phasediffs=nothing)
 
-Fill in `Vector` of candidate edges `E` that contain a phase change of 2 quadrants.
+Empty candidate edges `E` and push edges from `tess` that contain a phase change of 2
+quadrants.
 
 If `phasediffs` is not `nothing`, then push `|ΔQ|` of each edge to `phasediffs`.
 This is useful for plotting.
 
-Any root or pole is located at the point where the regions described by four different
-quadrants meet. Since any triangulation of the four nodes located in the four different
-quadrants requires at least one edge of ``|ΔQ| = 2``, then all such edges are potentially in
-the vicinity of a root or pole.
+Roots or poles are located where the regions described by four different quadrants meet.
+Since any triangulation of the four nodes located in the four different quadrants requires
+at least one edge of ``|ΔQ| = 2``, then all such edges are potentially in the vicinity of a
+root or pole.
 
 `E` is not sorted.
 """
-function candidateedges!(E, tess, pd=nothing)
+function candidateedges!(E, tess, phasediffs=nothing)
     empty!(E)
     for edge in each_solid_edge(tess)
         _candidateedge!(E, tess, edge)
     end
 end
 
-function candidateedges!(E, tess, pd::PlotData)
+function candidateedges!(E, tess, phasediffs::PlotData)
     empty!(pd.phasediffs)
     for edge in each_solid_edge(tess)
         _candidateedge!(E, tess, edge)
@@ -214,15 +214,16 @@ function addzone2node!(tess, p, q, r, skinnytriangle)
 end
 
 """
-    splittriangles!(tess, unique_pts, tolerance, skinnytriangle)
+    splittriangles!(tess, unique_idxs, tolerance, skinnytriangle)
 
-Zone `1` triangles have more than one node in `edge_idxs`, whereas zone `2` triangles have
-only a single node.
+Refine `tess` based on `unique_idxs` of select candidate edges.
+
+See also [`addzone1node!`](@ref), [`addzone2node!`](@ref).
 """
-function splittriangles!(tess, unique_pts, tolerance, skinnytriangle)
+function splittriangles!(tess, unique_idxs, tolerance, skinnytriangle)
     triangles = Set{DT.triangle_type(tess)}()
     edges = Set{DT.edge_type(tess)}()
-    for p1 in unique_pts
+    for p1 in unique_idxs
         adj2v = get_adjacent2vertex(tess, p1) 
         for (p2, p3) in adj2v
             sortedtri = DT.sort_triangle((p1, p2, p3))
@@ -232,7 +233,7 @@ function splittriangles!(tess, unique_pts, tolerance, skinnytriangle)
             push!(triangles, sortedtri)
             p, q, r = get_point(tess, p1, p2, p3)
 
-            if p2 in unique_pts || p3 in unique_pts
+            if p2 in unique_idxs || p3 in unique_idxs
                 # (p1, p2, p3) is a zone 1 triangle
                 # Add a new node at the midpoint of each edge of (p1, p2, p3)
                 if !(sort_edge(p1, p2) in edges)
@@ -259,7 +260,7 @@ end
 """
     contouredges(tess, E)
 
-Find contour edges `C` from the edges of triangles containing at least one of candidate
+Return contour edges from the edges of triangles containing at least one of candidate
 edges `E`.
 """
 function contouredges(tess, E)
@@ -301,22 +302,19 @@ function contouredges(tess, E)
 end
 
 """
-    findnextpt(tess, prevpt, refpt, nextedges)
+    findnextedge(tess, previdx, refidx, nextedges)
 
-Find the index of the next node in `nodes` as part of the candidate region boundary process.
-The next one (after the reference) is picked from the fixed set of nodes.
+Return the edge in `nextedges` that traces out the candidate region boundary.
 
 Determined by the node that has the smallest difference in phase angle between the vector
-from `prevnode` to `refnode` and the vector from the sample node to `refnode`. In other
-words, it chooses the node that makes the least sharp among the possible paths. This traces
-the outside closing contour around the candidate region.
+from `prevnode` to `refnode` and the vector from the sample node to `refnode`.
 """
-function findnextpt(tess, prevpt, refpt, nextedges)
+function findnextedge(tess, previdx, refidx, nextedges)
     minphi = 2π + 1  # max diff of angles is 2π, so this is guaranteed larger
     c = first(nextedges)
 
-    P = complex(get_point(tess, prevpt))
-    S = complex(get_point(tess, refpt))
+    P = complex(get_point(tess, previdx))
+    S = complex(get_point(tess, refidx))
     SP = P - S
     aSP = angle(SP)
 
@@ -345,78 +343,84 @@ end
 """
     evaluateregions!(C, tess)
 
-This function breaks C into the subsets Cᵏ for the closing contour surrounding the kth
-candidate region.
+This function returns a `Vector` of `Vector`s of point indices that make up the contour of
+the kth candidate region within `C`.
 
-Note: this function consumes `C`
+!!! note
+
+    This function empties `C`.
 """
 function evaluateregions!(C, tess)
     c = first(C)
     regions = [[c[1]]]
-    refpt = c[2]
+    refidx = c[2]
     numregions = 1
     delete!(C, c)
 
     nextedges = Vector{DT.edge_type(tess)}()
     while length(C) > 0
-        # Writing out the for loop avoids a Core.box closure issue with `refpt`
-        # nextedges = [c for c in C if refpt in c]
+        # Writing out the for loop avoids a Core.box closure issue with `refidx`
+        # nextedges = [c for c in C if refidx in c]
         for c in C
-            if refpt in c
+            if refidx in c
                 push!(nextedges, c)
             end
         end
 
         if isempty(nextedges)
             # Contour has closed
-            push!(regions[numregions], refpt)
+            push!(regions[numregions], refidx)
             
             # Begin the next contour region
             c = first(C)
             numregions += 1
             push!(regions, [c[1]])
-            refpt = c[2]
+            refidx = c[2]
             delete!(C, c)
         else
             if length(nextedges) > 1
                 # Note: very rare - two triangles share a vertex (but not an edge)
-                prevpt = last(regions[numregions])
-                c = findnextpt(tess, prevpt, refpt, nextedges)
+                previdx = last(regions[numregions])
+                c = findnextedge(tess, previdx, refidx, nextedges)
                 ### TEMP XXX
                 @info "length(nextedges) = $(length(nextedges))"
             else
                 c = only(nextedges)
             end
 
-            if c[1] == refpt 
+            if c[1] == refidx 
                 push!(regions[numregions], c[1])
-                refpt = c[2]
-            elseif c[2] == refpt
+                refidx = c[2]
+            elseif c[2] == refidx
                 push!(regions[numregions], c[2])
-                refpt = c[1]
+                refidx = c[1]
             end
             delete!(C, c)
         end
         empty!(nextedges)
     end
-    push!(regions[numregions], refpt)
+    push!(regions[numregions], refidx)
 
     return regions
 end
 
 """
-    rootsandpoles(regions, quadrants)
+    rootsandpoles(tess, regions)
 
-Identify roots and poles of function based on `regions` and `quadrants`.
+Return `Vector`s of roots and poles as identified from the collection `regions` of contour
+point indices.
+
+See also [`evaluateregions!`](@ref).
 """
 function rootsandpoles(tess, regions)
-    zroots = Vector{complex(number_type(tess))}()
+    zroots = Vector{complex(DT.number_type(tess))}()
     zpoles = similar(zroots)
     for r in regions
-        quadrantsequence = [complex(get_point(tess, p)) for p in r]
+        pts = get_point(tess, r...)
+        quadrantsequence = [getquadrant(p) for p in pts]
 
         # Sign flip because `r` are in opposite order of Matlab?
-        dq = -diff(quadrantsequence)
+        dq = diff(quadrantsequence)
         for i in eachindex(dq)
             if dq[i] == 3
                 dq[i] = -1
@@ -429,12 +433,12 @@ function rootsandpoles(tess, regions)
             end
         end
         q = sum(dq)/4
-        z = sum(r)/length(r)
+        z = sum(complex, pts)/length(pts)
 
         if q > 0
-            push!(zroots, convert(complexT, z))  # convert in case T isn't Float64
+            push!(zroots, z)  # convert in case T isn't Float64
         elseif q < 0
-            push!(zpoles, convert(complexT, z))
+            push!(zpoles, z)
         end
     end
 
@@ -445,7 +449,8 @@ end
     tesselate!(tess, fcn, params, pd=nothing)
 
 Label quadrants, identify candidate edges, and iteratively split triangles, returning
-the tuple `(tess, E)`. Note that `tess` is modified in-place.
+the tuple `(tess, E)` where `tess` is the refined tesselation and `E` is a collection of
+edges that are candidates for being in the vicinity of a root or pole.
 """
 function tesselate!(tess, fcn, params, pd::Union{Nothing,PlotData}=nothing)
     # It's more efficient to `empty!` the sets in the loop than it is to create and allocate
@@ -470,11 +475,11 @@ function tesselate!(tess, fcn, params, pd::Union{Nothing,PlotData}=nothing)
         isempty(selectE) && return tess, E
 
         # Get unique indices of points in `edges`
-        unique_pts = Set(Iterators.flatten(selectE))
+        unique_idxs = Set(Iterators.flatten(selectE))
 
         # Refine tesselation
         # TODO: pass pd to store the point at every iteration
-        splittriangles!(tess, unique_pts, params.tolerance, params.skinnytriangle)
+        splittriangles!(tess, unique_idxs, params.tolerance, params.skinnytriangle)
     end
 
     # Assign quadrants to triangles split at end of last loop
@@ -529,8 +534,8 @@ function grpf(fcn, initial_mesh, params=GRPFParams())
     isempty(E) && return Vector{eltype(initial_mesh)}(), Vector{eltype(initial_mesh)}()
 
     C = contouredges(tess, E)
-    regions = evaluateregions!(C)
-    zroots, zpoles = rootsandpoles(regions, quadrants)
+    regions = evaluateregions!(C, tess)
+    zroots, zpoles = rootsandpoles(tess, regions)
 
     return zroots, zpoles
 end

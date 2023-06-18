@@ -1,7 +1,7 @@
 Hfcn(z) = (z + 2)/(z^2 + 1/4)  # zero: -2 and poles: ±im/2
 Hfcn_mesh() = rectangulardomain(complex(-3, -1), complex(1, 1), 0.6)
 
-using GLMakie; Makie.inline!(false)
+# using GLMakie; Makie.inline!(false)
 function Hfcn_plot()
     initial_mesh = Hfcn_mesh()
     mesh = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
@@ -40,7 +40,7 @@ function Hfcn_plot()
     Legend(f[1,2], elements, string.(1:4), label="Quadrant")
     f
 
-    RP.assignquadrants!(mesh, Hfcn, false)
+    RP.assignquadrants!(get_points(mesh), Hfcn, false)
     newpts = RP.getquadrant.(RP.each_point(mesh))
     scatter!(ax, reim.(complex.(mesh)), color=colors[newpts], markersize=20)
 
@@ -48,54 +48,16 @@ end
 
 function test_GRPFParams()
     ga = GRPFParams()
-    gb = GRPFParams(100, 500000, 3, 5000, 1e-9, false)
-    gc = GRPFParams(200, 10000, 3, 10000, 1e-8, true)
+    gb = GRPFParams(100, 500000, 3, 1e-9, false)
+    gc = GRPFParams(200, 10000, 3, 1e-8, true)
 
     # equality
     @test ga == gb
     @test ga != gc
 
     # constructors
-    @test GRPFParams(5000, 1e-3) == GRPFParams(100, 500000, 3, 5000, 1e-3, false)
-    @test GRPFParams(5000, 1e-3, true) == GRPFParams(100, 500000, 3, 5000, 1e-3, true)
-
-    @test_logs (:warn,
-        "GRPFParams `tess_sizehint` is greater than `maxnodes`") GRPFParams(100, 10, 3,
-                                                                    5000, 1e-9, false)
-end
-
-function test_functionstructs()
-    rmin, rmax = -1.0, 1.0
-    imin, imax = -1.0, 1.0
-
-    g2f = RP.Geometry2Function(rmin, rmax, imin, imax)
-    @test eltype(g2f) == Float64
-
-    fval = complex(-1.0, 1.0)
-    f2g = RP.fcn2geom(fval, rmin, rmax, imin, imax)
-
-    @test reim(f2g) == (RP.MINCOORD, RP.MAXCOORD)
-    @test g2f(f2g) == fval
-
-    fval = complex(0.2, -0.1)
-    f2g = RP.fcn2geom(fval, rmin, rmax, imin, imax)
-    @test g2f(f2g) ≈ fval   atol=1e-15  # floating point limitation
-
-    p = RP.Point2D(reim(f2g)...)
-    @test g2f(p) ≈ fval     atol=1e-15
-
-    fval2 = complex(0.4, 0.8)
-    f2g2 = RP.fcn2geom(fval2, rmin, rmax, imin, imax)
-    p2 = RP.Point2D(reim(f2g2)...)
-    e = RP.DelaunayEdge(p, p2)
-    f1, f2 = g2f(e)
-    @test f1 ≈ fval     atol=1e-15
-    @test f2 ≈ fval2     atol=1e-15
-
-    rmin, rmax = big(-1.0), big(1.0)
-    imin, imax = big(-1.0), big(1.0)
-    g2f = RP.Geometry2Function(rmin, rmax, imin, imax)
-    @test eltype(g2f) == BigFloat
+    @test GRPFParams(1e-3) == GRPFParams(100, 500000, 3, 1e-3, false)
+    @test GRPFParams(1e-3, true) == GRPFParams(100, 500000, 3, 1e-3, true)
 end
 
 function test_assignquadrants!()
@@ -111,7 +73,7 @@ function test_assignquadrants!()
     # multithreading = true
     mesh = RP.QuadrantPoints(RP.QuadrantPoint.(pts))
     tess = triangulate(mesh)
-    RP.assignquadrants!(tess, Hfcn, true)
+    RP.assignquadrants!(get_points(tess), Hfcn, true)
     @test RP.getquadrant.(get_points(tess)) == RP.quadrant.(Hfcn.(pts))
 end
 
@@ -243,9 +205,42 @@ function test_evaluateregions()
     fig
 end
 
+function test_rootsandpoles()
+    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(Hfcn_mesh()))
+    tess = RP.triangulate(mesh)
+    tess, E = RP.tesselate!(tess, Hfcn, GRPFParams(30, 5000, 3, 1e-3, false))
+    C = RP.contouredges(tess, E)
+    regions = RP.evaluateregions!(C, tess)
+
+    r = regions[1]
+    pts = get_point(tess, r...)
+    quadrantsequence = [RP.getquadrant(p) for p in pts]
+
+    # Sign flip because `r` are in opposite order of Matlab?
+    dq = diff(quadrantsequence)
+    for i in eachindex(dq)
+        if dq[i] == 3
+            dq[i] = -1
+        elseif dq[i] == -3
+            dq[i] = 1
+        elseif abs(dq[i]) == 2
+            # ``|ΔQ| = 2`` is ambiguous; cannot tell whether phase increases or
+            # decreases by two quadrants
+            dq[i] = 0
+        end
+    end
+    q = sum(dq)/4
+    z = sum(complex, pts)/length(pts)
+
+    if q > 0
+        push!(zroots, z)  # convert in case T isn't Float64
+    elseif q < 0
+        push!(zpoles, z)
+    end
+end
+
 @testset "RootsAndPoles.jl" begin
     test_GRPFParams()
-    test_functionstructs()
     test_assignquadrants!()
     test_candidateedges!()
     test_addzone1node!()
