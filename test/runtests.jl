@@ -6,21 +6,29 @@ using DelaunayTriangulation
 using RootsAndPoles
 const RP = RootsAndPoles
 
-function approxmatch(A::AbstractArray, B::AbstractArray)
+function approxmatch(A, B)
     length(A) == length(B) || return false
 
+    # Need to make sure we don't match to the same root twice. It's happened...
+    Acopy = copy(A)
+    Bcopy = copy(B)
+
     # This could be less than O(n²) but it's not worth the bookkeeping effort
-    @inbounds for i in eachindex(A)
+    i = 1
+    while length(Acopy) > 0
         amatch = false
-        @inbounds for j in eachindex(B)
-            if A[i] ≈ B[j]
+        for j in eachindex(Bcopy)
+            if Acopy[i] ≈ Bcopy[j]
                 amatch = true
+                deleteat!(Acopy, i)
+                deleteat!(Bcopy, j)
                 break
             end
         end
         if !amatch
             return false
         end
+        i += 1
     end
     return true
 end
