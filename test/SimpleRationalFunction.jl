@@ -18,6 +18,115 @@ matlab_zroots = [-0.999999999951224 - 0.000000000028656im,
 
 matlab_zpoles = [0.000000000380455 - 0.999999999701977im]
 
+
+#
+mesh = RP.QuadrantPoints(RP.QuadrantPoint.(origcoords))
+tess = RP.triangulate(mesh)
+tess, E = RP.tesselate!(tess, simplefcn, GRPFParams(1e-4))
+
+colors = Makie.wong_colors()[1:4]
+fig = Figure()
+ax = Axis(fig[1, 1], xlabel="Re", ylabel="Im")
+triplot!(ax, tess, triangle_color=colors[RP.getquadrant.(get_points(tess))])
+
+C = RP.contouredges(tess, E)
+
+# fig = Figure()
+# ax = Axis(fig[1, 1], xlabel="Re", ylabel="Im")
+# triplot!(ax, tess, triangle_color=colors[RP.getquadrant.(get_points(tess))])
+
+
+# contouredges
+
+# C = Set{DT.edge_type(tess)}()
+D = Vector{DT.edge_type(tess)}()
+for e in E
+    # v = get_adjacent(tess, e)  # (e[1], e[2], v) is a positively oriented triangle
+
+    # All neighboring vertices of the edge
+    v1 = get_neighbours(tess, e[1])
+    v2 = get_neighbours(tess, e[2])
+    # v = symdiff(v1, v2) # if an edge occurs twice...
+    v = union(v1, v2)
+
+    tri = triangulate(RP.QuadrantPoints(collect(get_point(tess, v...))))
+    D = get_convex_hull(tri)
+    triplot(tri, convex_hull_linewidth=6)
+
+
+    # If an edge occurs twice, that is because it is an edge shared by multiple triangles
+    # and by definition is not an edge on the boundary of the candidate region.
+    # Therefore, if an edge we come to is already in C, delete it.
+    # if (v, e[1]) in D
+    #     # delete!(C, (v, e[1]))
+    # elseif (e[1], v) in D
+    #     # We need to check both edge orientations (a, b) and (b, a)
+    #     # delete!(C, (e[1], v))
+    # else
+        push!(D, (v, e[1]))
+    # end
+
+    # if (v, e[2]) in D
+    #     # delete!(C, (v, e[2]))
+    # elseif (e[2], v) in D
+    #     # delete!(C, (e[2], v))
+    # else
+        push!(D, (e[2], v))
+    # end
+
+    # if e in D
+    #     # delete!(C, e)
+    # elseif (e[2], e[1]) in D
+    #     # delete!(C, (e[2], e[1]))
+    # else
+        push!(D, e)
+    # end
+end
+
+
+for d in D
+    x1, y1 = reim(complex(DT.get_point(tess, d[1])))
+    x2, y2 = reim(complex(DT.get_point(tess, d[2])))
+    # println(x1," ", y1)
+    # println(x2," ", y2)
+    lines!(ax, [x1, x2], [y1, y2], color="lime", overdraw=true, linewidth=4)
+    # scatter!(ax, [x1, x2], [y1, y2], color=[colors[2i-1], colors[2i]])
+    i += 1
+end
+#
+
+colors = Makie.colormap("Reds", 2*length(C))
+i = 1
+for c in C
+    x1, y1 = reim(complex(DT.get_point(tess, c[1])))
+    x2, y2 = reim(complex(DT.get_point(tess, c[2])))
+    # println(x1," ", y1)
+    # println(x2," ", y2)
+    lines!(ax, [x1, x2], [y1, y2], color="red", overdraw=true, linewidth=4)
+    # scatter!(ax, [x1, x2], [y1, y2], color=[colors[2i-1], colors[2i]])
+    i += 1
+end
+
+
+# scatter!(ax, reim(collect(complex.(DT.get_point(tess, Iterators.flatten(E)...))))...,
+    # color="white", markersize=10,overdraw=true)
+
+for e in E
+    x1, y1 = reim(complex(DT.get_point(tess, e[1])))
+    x2, y2 = reim(complex(DT.get_point(tess, e[2])))
+    # println(x1," ", y1)
+    # println(x2," ", y2)
+    lines!(ax, [x1, x2], [y1, y2], color="white", overdraw=true, linewidth=4)
+    # scatter!(ax, [x1, x2], [y1, y2], color=[colors[2i-1], colors[2i]])
+    i += 1
+end
+
+fig
+#
+
+
+
+
 zroots, zpoles = grpf(simplefcn, origcoords)
 
 @test length(zroots) == 3

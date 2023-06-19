@@ -266,6 +266,8 @@ edges `E`.
 function contouredges(tess, E)
     C = Set{DT.edge_type(tess)}()
 
+    # XXX BUG: This doesn't check the triangle on both sides of an edge, only 1...
+
     for e in E
         v = get_adjacent(tess, e)  # (e[1], e[2], v) is a positively oriented triangle
 
