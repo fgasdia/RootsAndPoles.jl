@@ -135,13 +135,13 @@ function assignquadrants!(points, f, multithreading=false)
 end
 
 """
-    candidateedges!(E, tess, phasediffs=nothing)
+    candidateedges!(E, tess, pd=nothing)
 
 Empty candidate edges `E` and push edges from `tess` that contain a phase change of 2
 quadrants.
 
-If `phasediffs` is not `nothing`, then push `|ΔQ|` of each edge to `phasediffs`.
-This is useful for plotting.
+If `phasediffs` is not `nothing`, then push `|ΔQ|` of each edge to `pd`. This is useful for
+plotting.
 
 Roots or poles are located where the regions described by four different quadrants meet.
 Since any triangulation of the four nodes located in the four different quadrants requires
@@ -150,23 +150,24 @@ root or pole.
 
 `E` is not sorted.
 """
-function candidateedges!(E, tess, phasediffs=nothing)
+function candidateedges!(E, tess, pd=nothing)
     empty!(E)
-    for edge in each_solid_edge(tess)
+    for edge in each_edge(tess)
         _candidateedge!(E, tess, edge)
     end
 end
 
-function candidateedges!(E, tess, phasediffs::PlotData)
+function candidateedges!(E, tess, pd::PlotData)
+    empty!(E)
     empty!(pd.phasediffs)
-    for edge in each_solid_edge(tess)
+    for edge in each_edge(tess)
         _candidateedge!(E, tess, edge)
         push!(pd.phasediffs, ΔQ)
     end
 end
 
 function _candidateedge!(E, tess, edge)
-    a, b = get_point(tess, edge...)
+    a, b = get_point(tess, edge[1], edge[2])
     ΔQ = mod(getquadrant(a) - getquadrant(b), 4)  # phase difference
     if ΔQ == 2
         push!(E, edge)
@@ -176,7 +177,7 @@ end
 function selectedges!(selectE, tess, E, tolerance)
     empty!(selectE)
     for e in E
-        d = distance(get_point(tess, e...))
+        d = distance(get_point(tess, e[1], e[2]))
         if d > tolerance
             push!(selectE, e)
         end
@@ -233,6 +234,8 @@ function splittriangles!(tess, unique_idxs, tolerance, skinnytriangle)
             push!(triangles, sortedtri)
             p, q, r = get_point(tess, p1, p2, p3)
 
+            # zone1: > 1 node in unique_idxs
+            # zone2: 1 node in unique_idxs
             if p2 in unique_idxs || p3 in unique_idxs
                 # (p1, p2, p3) is a zone 1 triangle
                 # Add a new node at the midpoint of each edge of (p1, p2, p3)
