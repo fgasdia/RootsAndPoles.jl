@@ -14,6 +14,7 @@ end
 getquadrant(p::QuadrantPoint) = p.q
 setquadrant!(p::QuadrantPoint, q) = (p.q = q)
 Base.complex(p::QuadrantPoint) = complex(p.x, p.y)
+# Base.isless(p1::QuadrantPoint, p2::QuadrantPoint) = (p1.x, p1.y) < (p2.x, p2.y)
 
 DT.getx(p::QuadrantPoint) = p.x
 DT.gety(p::QuadrantPoint) = p.y

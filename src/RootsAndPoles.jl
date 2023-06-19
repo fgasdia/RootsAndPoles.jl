@@ -266,37 +266,40 @@ edges `E`.
 function contouredges(tess, E)
     C = Set{DT.edge_type(tess)}()
 
-    # XXX BUG: This doesn't check the triangle on both sides of an edge, only 1...
-
-    for e in E
-        v = get_adjacent(tess, e)  # (e[1], e[2], v) is a positively oriented triangle
-
+    for e in E 
+        # Get triangles sharing edge `e`
+        v1 = get_neighbours(tess, e[1])
+        v2 = get_neighbours(tess, e[2])
+        vs = intersect(v1, v2)
+    
         # If an edge occurs twice, that is because it is an edge shared by multiple triangles
         # and by definition is not an edge on the boundary of the candidate region.
         # Therefore, if an edge we come to is already in C, delete it.
-        if (v, e[1]) in C
-            delete!(C, (v, e[1]))
-        elseif (e[1], v) in C
-            # We need to check both edge orientations (a, b) and (b, a)
-            delete!(C, (e[1], v))
-        else
-            push!(C, (v, e[1]))
-        end
+        for v in vs
+            if (e[1], v) in C
+                delete!(C, (e[1], v))
+            elseif (v, e[1]) in C
+                # We need to check both edge orientations (a, b) and (b, a)
+                delete!(C, (v, e[1]))
+            else
+                push!(C, (e[1], v))
+            end
+    
+            if (e[2], v) in C
+                delete!(C, (e[2], v))
+            elseif (v, e[2]) in C
+                delete!(C, (v, e[2]))
+            else
+                push!(C, (e[2], v))
+            end
 
-        if (v, e[2]) in C
-            delete!(C, (v, e[2]))
-        elseif (e[2], v) in C
-            delete!(C, (e[2], v))
-        else
-            push!(C, (e[2], v))
-        end
-
-        if e in C
-            delete!(C, e)
-        elseif (e[2], e[1]) in C
-            delete!(C, (e[2], e[1]))
-        else
-            push!(C, e)
+            if e in C
+                delete!(C, e)
+            elseif (e[2], e[1]) in C
+                delete!(C, (e[2], e[1]))
+            else
+                push!(C, e)
+            end
         end
     end
 

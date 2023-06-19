@@ -38,8 +38,8 @@ C = RP.contouredges(tess, E)
 
 # contouredges
 
-# C = Set{DT.edge_type(tess)}()
-D = Vector{DT.edge_type(tess)}()
+C = Set{DT.edge_type(tess)}()
+# D = Vector{DT.edge_type(tess)}()
 for e in E
     # v = get_adjacent(tess, e)  # (e[1], e[2], v) is a positively oriented triangle
 
@@ -47,11 +47,37 @@ for e in E
     v1 = get_neighbours(tess, e[1])
     v2 = get_neighbours(tess, e[2])
     # v = symdiff(v1, v2) # if an edge occurs twice...
-    v = union(v1, v2)
+    vs = intersect(v1, v2)
+
+    # v1 = get_adjacent2vertex(tess, e[1])
+    # v2 = get_adjacent2vertex(tess, e[2])
+
+    for v in vs
+        if (e[1], v) in C
+            delete!(C, (e[1], v))
+        elseif (v, e[1]) in C
+            delete!(C, (v, e[1]))
+        else
+            push!(C, (e[1], v))
+        end
+
+        if (e[2], v) in C
+            delete!(C, (e[2], v))
+        elseif (v, e[2]) in C
+            delete!(C, (v, e[2]))
+        else
+            push!(C, (e[2], v))
+        end
+    end
+end
 
     tri = triangulate(RP.QuadrantPoints(collect(get_point(tess, v...))))
     D = get_convex_hull(tri)
     triplot(tri, convex_hull_linewidth=6)
+
+    hull = convex_hull(RP.QuadrantPoints(collect(get_point(tess, v...))))
+    # DT.num_points(t::NTuple) = length(t)
+    # convex_hull(reim.(collect(complex.(get_point(tess, v...)))))
 
 
     # If an edge occurs twice, that is because it is an edge shared by multiple triangles
@@ -117,7 +143,7 @@ for e in E
     # println(x1," ", y1)
     # println(x2," ", y2)
     lines!(ax, [x1, x2], [y1, y2], color="white", overdraw=true, linewidth=4)
-    # scatter!(ax, [x1, x2], [y1, y2], color=[colors[2i-1], colors[2i]])
+    scatter!(ax, [x1, x2], [y1, y2], color="white", overdraw=true, markersize=10)
     i += 1
 end
 
