@@ -152,7 +152,7 @@ root or pole.
 """
 function candidateedges!(E, tess, pd=nothing)
     empty!(E)
-    for edge in each_edge(tess)
+    for edge in each_solid_edge(tess)
         _candidateedge!(E, tess, edge)
     end
 end
@@ -160,7 +160,7 @@ end
 function candidateedges!(E, tess, pd::PlotData)
     empty!(E)
     empty!(pd.phasediffs)
-    for edge in each_edge(tess)
+    for edge in each_solid_edge(tess)
         _candidateedge!(E, tess, edge)
         push!(pd.phasediffs, ΔQ)
     end
@@ -260,6 +260,23 @@ function splittriangles!(tess, unique_idxs, tolerance, skinnytriangle)
     end
 end
 
+function triangleedges(tess, E)
+    D = Vector{DT.edge_type(tess)}()
+    for e in E
+        # Get triangles sharing edge `e` - usually two for each edge
+        v1 = get_neighbours(tess, e[1])
+        v2 = get_neighbours(tess, e[2])
+        vs = intersect(v1, v2)
+
+        for v in vs
+            tri = DT.construct_positively_oriented_triangle(tess, e[1], e[2], v)
+            i, j, k = indices(tri)
+            push!(D, (i, j), (j, k), (k, i))
+        end
+    end
+    return unique(D)
+end
+
 """
     contouredges(tess, E)
 
@@ -327,20 +344,14 @@ function findnextedge(tess, previdx, refidx, nextedges)
     aSP = angle(SP)
 
     for e in nextedges
-        N1 = complex(get_point(tess, e[1]))
-        N2 = complex(get_point(tess, e[2]))
+        N = complex(get_point(tess, e[2]))
         
-        SN1 = N1 - S
-        SN2 = N2 - S
+        SN = N - S
 
-        phi1 = mod2pi(aSP - angle(SN1))
-        phi2 = mod2pi(aSP - angle(SN2))
+        phi = mod2pi(aSP - angle(SN))
 
-        if phi1 < minphi
-            minphi = phi1
-            c = e
-        elseif phi2 < minphi
-            minphi = phi2
+        if phi < minphi
+            minphi = phi
             c = e
         end
     end
@@ -358,6 +369,7 @@ the kth candidate region within `C`.
 
     This function empties `C`.
 """
+# TODO: we could rewrite this to work with C as a vector - we don't make use of it being a Set
 function evaluateregions!(C, tess)
     c = first(C)
     regions = [[c[1]]]
@@ -370,16 +382,14 @@ function evaluateregions!(C, tess)
         # Writing out the for loop avoids a Core.box closure issue with `refidx`
         # nextedges = [c for c in C if refidx in c]
         for c in C
-            if refidx in c
+            if c[1] == refidx
                 push!(nextedges, c)
             end
         end
 
         if isempty(nextedges)
-            # Contour has closed
             push!(regions[numregions], refidx)
-            
-            # Begin the next contour region
+
             c = first(C)
             numregions += 1
             push!(regions, [c[1]])
@@ -387,22 +397,13 @@ function evaluateregions!(C, tess)
             delete!(C, c)
         else
             if length(nextedges) > 1
-                # Note: very rare - two triangles share a vertex (but not an edge)
                 previdx = last(regions[numregions])
                 c = findnextedge(tess, previdx, refidx, nextedges)
-                ### TEMP XXX
-                @info "length(nextedges) = $(length(nextedges))"
             else
                 c = only(nextedges)
             end
-
-            if c[1] == refidx 
-                push!(regions[numregions], c[1])
-                refidx = c[2]
-            elseif c[2] == refidx
-                push!(regions[numregions], c[2])
-                refidx = c[1]
-            end
+            push!(regions[numregions], c[1])
+            refidx = c[2]
             delete!(C, c)
         end
         empty!(nextedges)
@@ -411,6 +412,60 @@ function evaluateregions!(C, tess)
 
     return regions
 end
+
+
+# function evaluateregions!(C, tess)
+#     c = first(C)
+#     regions = [[c[1]]]
+#     refidx = c[2]
+#     numregions = 1
+#     delete!(C, c)
+
+#     nextedges = Vector{DT.edge_type(tess)}()
+#     while length(C) > 0
+#         # Writing out the for loop avoids a Core.box closure issue with `refidx`
+#         # nextedges = [c for c in C if refidx in c]
+#         for c in C
+#             if refidx in c
+#                 push!(nextedges, c)
+#             end
+#         end
+
+#         if isempty(nextedges)
+#             # Contour has closed
+#             push!(regions[numregions], refidx)
+            
+#             # Begin the next contour region
+#             c = first(C)
+#             numregions += 1
+#             push!(regions, [c[1]])
+#             refidx = c[2]
+#             delete!(C, c)
+#         else
+#             if length(nextedges) > 1
+#                 previdx = last(regions[numregions])
+#                 c = findnextedge(tess, previdx, refidx, nextedges)
+#                 ### TEMP XXX
+#                 @info "length(nextedges) = $(length(nextedges))"
+#             else
+#                 c = only(nextedges)
+#             end
+
+#             if c[1] == refidx 
+#                 push!(regions[numregions], c[1])
+#                 refidx = c[2]
+#             elseif c[2] == refidx
+#                 push!(regions[numregions], c[2])
+#                 refidx = c[1]
+#             end
+#             delete!(C, c)
+#         end
+#         empty!(nextedges)
+#     end
+#     push!(regions[numregions], refidx)
+
+#     return regions
+# end
 
 """
     rootsandpoles(tess, regions)
@@ -478,11 +533,11 @@ function tesselate!(tess, fcn, params, pd::Union{Nothing,PlotData}=nothing)
         candidateedges!(E, tess, pd)
         isempty(E) && return tess, E
 
-        # Select candidate edges that are longer than the chosen tolerance
+        # Select candidate edges that are longer than `tolerance`
         selectedges!(selectE, tess, E, params.tolerance)
         isempty(selectE) && return tess, E
 
-        # Get unique indices of points in `edges`
+        # Get unique indices of points in `selectE`
         unique_idxs = Set(Iterators.flatten(selectE))
 
         # Refine tesselation
@@ -490,8 +545,9 @@ function tesselate!(tess, fcn, params, pd::Union{Nothing,PlotData}=nothing)
         splittriangles!(tess, unique_idxs, params.tolerance, params.skinnytriangle)
     end
 
-    # Assign quadrants to triangles split at end of last loop
+    # Assign quadrants and candidate edges for triangles split at end of last loop
     assignquadrants!(get_points(tess), fcn, params.multithreading)
+    candidateedges!(E, tess, pd)
 
     iteration >= params.maxiterations && @warn "$(iteration) iterations. `params.maxiterations` reached."
     num_vertices(tess) >= params.maxnodes && @warn "Tesselation has $(num_vertices(tess)) vertices. `params.maxnodes` reached."
@@ -539,7 +595,7 @@ function grpf(fcn, initial_mesh, params=GRPFParams())
     tess, E = tesselate!(tess, fcn, params)
 
     # TODO: test for type stability when no roots or poles in domain of initial_mesh
-    isempty(E) && return Vector{eltype(initial_mesh)}(), Vector{eltype(initial_mesh)}()
+    isempty(E) && return Vector{complex(DT.number_type(tess))}(), Vector{complex(DT.number_type(tess))}()
 
     C = contouredges(tess, E)
     regions = evaluateregions!(C, tess)

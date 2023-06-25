@@ -10,6 +10,7 @@ function sort_edge(p1, p2)
         return p2, p1
     end
 end
+sort_edge(p::Tuple{Int,Int}) = sort_edge(p[1], p[2])
 
 """
     getplotdata(tess, quadrants, phasediffs, g2f)

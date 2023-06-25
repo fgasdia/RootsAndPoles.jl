@@ -22,12 +22,33 @@ matlab_zpoles = [0.000000000380455 - 0.999999999701977im]
 #
 mesh = RP.QuadrantPoints(RP.QuadrantPoint.(origcoords))
 tess = RP.triangulate(mesh)
-tess, E = RP.tesselate!(tess, simplefcn, GRPFParams(1e-4))
+tess, E = RP.tesselate!(tess, simplefcn, GRPFParams(1e-6))
 
+
+C = contouredges(tess, E)
+regions = RP.evaluateregions!(C, tess)
+zroots, zpoles = RP.rootsandpoles(tess, regions)
+
+@test approxmatch(zroots, matlab_zroots)
+@test approxmatch(zpoles, matlab_zpoles)
+
+
+using Makie.Colors
+using GLMakie; Makie.inline!(false)
 colors = Makie.wong_colors()[1:4]
-fig = Figure()
-ax = Axis(fig[1, 1], xlabel="Re", ylabel="Im")
+fig2 = Figure()
+ax = Axis(fig2[1, 1], xlabel="Re", ylabel="Im")
+# limits!(ax, (-1.00001,-0.99999), (-0.00001,0.00001))
+limits!(ax, (-0.00001, 0.00001), (0.99999, 1.00001))
 triplot!(ax, tess, triangle_color=colors[RP.getquadrant.(get_points(tess))])
+
+for r in regions
+    cmplxs = [reim(v) for v in complex.(DT.get_point(tess, r...))]
+
+    lines!(ax, cmplxs, color=HSV.(range(0, 360, length(cmplxs)), 50, 50), overdraw=true, linewidth=4)
+end
+fig2
+
 
 C = RP.contouredges(tess, E)
 
@@ -37,87 +58,159 @@ C = RP.contouredges(tess, E)
 
 
 # contouredges
+function triangleedges(tess, E)
+    # D = Vector{DT.edge_type(tess)}()
+    D = Set{DT.edge_type(tess)}()
+    for e in E
+        # v = get_adjacent(tess, e)  # (e[1], e[2], v) is a positively oriented triangle
 
-C = Set{DT.edge_type(tess)}()
-# D = Vector{DT.edge_type(tess)}()
-for e in E
-    # v = get_adjacent(tess, e)  # (e[1], e[2], v) is a positively oriented triangle
+        # # All neighboring vertices of the edge
+        # v1 = get_neighbours(tess, e[1])
+        # v2 = get_neighbours(tess, e[2])
+        # # v = symdiff(v1, v2) # if an edge occurs twice...
+        # vs = intersect(v1, v2)
 
-    # All neighboring vertices of the edge
-    v1 = get_neighbours(tess, e[1])
-    v2 = get_neighbours(tess, e[2])
-    # v = symdiff(v1, v2) # if an edge occurs twice...
-    vs = intersect(v1, v2)
 
-    # v1 = get_adjacent2vertex(tess, e[1])
-    # v2 = get_adjacent2vertex(tess, e[2])
+        # Get triangles sharing edge `e`
+        v1 = get_neighbours(tess, e[1])
+        v2 = get_neighbours(tess, e[2])
+        vs = intersect(v1, v2)
 
-    for v in vs
-        if (e[1], v) in C
-            delete!(C, (e[1], v))
-        elseif (v, e[1]) in C
-            delete!(C, (v, e[1]))
-        else
-            push!(C, (e[1], v))
-        end
-
-        if (e[2], v) in C
-            delete!(C, (e[2], v))
-        elseif (v, e[2]) in C
-            delete!(C, (v, e[2]))
-        else
-            push!(C, (e[2], v))
+        for v in vs
+            tri = DT.construct_positively_oriented_triangle(tess, e[1], e[2], v)
+            i, j, k = indices(tri)
+            push!(D, (i, j), (j, k), (k, i))
         end
     end
+    # return unique(D)
+    return D
 end
 
-    tri = triangulate(RP.QuadrantPoints(collect(get_point(tess, v...))))
-    D = get_convex_hull(tri)
-    triplot(tri, convex_hull_linewidth=6)
-
-    hull = convex_hull(RP.QuadrantPoints(collect(get_point(tess, v...))))
-    # DT.num_points(t::NTuple) = length(t)
-    # convex_hull(reim.(collect(complex.(get_point(tess, v...)))))
+findall(==(D[60]), D) == [41, 60]
+revD = reverse.(D)
+findall(==(D[1]), revD) == [4]
 
 
-    # If an edge occurs twice, that is because it is an edge shared by multiple triangles
-    # and by definition is not an edge on the boundary of the candidate region.
-    # Therefore, if an edge we come to is already in C, delete it.
-    # if (v, e[1]) in D
-    #     # delete!(C, (v, e[1]))
-    # elseif (e[1], v) in D
-    #     # We need to check both edge orientations (a, b) and (b, a)
-    #     # delete!(C, (e[1], v))
-    # else
-        push!(D, (v, e[1]))
-    # end
+function redundant_edge_count(C)
+    @assert allunique(C) "Algorithm assumes `C` is unique"
+    redundant_count = zeros(Int, length(C))
+    for j in eachindex(C)
+        if iszero(redundant_count[j])
+            # TEMP: replace with more efficient function
+            idx = findfirst(==(reverse(C[j])), C)  # there can be no more than 1 match because C isunique
+            # length(idx) > 1 && @info idx j
+            if isnothing(idx)
+                redundant_count[j] = 1
+            else
+                redundant_count[j] = 2
+                redundant_count[idx] = 2
+            end
+        end
+    end
 
-    # if (v, e[2]) in D
-    #     # delete!(C, (v, e[2]))
-    # elseif (e[2], v) in D
-    #     # delete!(C, (e[2], v))
-    # else
-        push!(D, (e[2], v))
-    # end
+    return redundant_count
+end
 
-    # if e in D
-    #     # delete!(C, e)
-    # elseif (e[2], e[1]) in D
-    #     # delete!(C, (e[2], e[1]))
-    # else
-        push!(D, e)
-    # end
+function isduplicate(C)
+    duplicate_edge = Dict{eltype(C),Bool}()
+    for c in C
+        if reverse(c) in C
+            duplicate_edge[c] = true
+        else
+            duplicate_edge[c] = false
+        end
+    end
+
+    return duplicate_edge
+end
+unique_edges(C, duplicate_edge) = Set(c for c in C if !duplicate_edge[c])
+
+# unique_edges(C, redundant_count) = [c for (i, c) in pairs(C) if redundant_count[i] == 1]
+
+function contouredges(tess, E)
+    D = triangleedges(tess, E)
+    duplicates = isduplicate(D)
+    C = unique_edges(D, duplicates)
+    return C
 end
 
 
-for d in D
-    x1, y1 = reim(complex(DT.get_point(tess, d[1])))
-    x2, y2 = reim(complex(DT.get_point(tess, d[2])))
-    # println(x1," ", y1)
-    # println(x2," ", y2)
-    lines!(ax, [x1, x2], [y1, y2], color="lime", overdraw=true, linewidth=4)
-    # scatter!(ax, [x1, x2], [y1, y2], color=[colors[2i-1], colors[2i]])
-    i += 1
+C = contouredges(tess, E)
+regions = RP.evaluateregions!(C, tess)
+zroots, zpoles = RP.rootsandpoles(tess, regions)
+
+
+    for c in C
+        x1, y1 = reim(complex(DT.get_point(tess, c[1])))
+        x2, y2 = reim(complex(DT.get_point(tess, c[2])))
+        lines!(ax, [x1, x2], [y1, y2], color="red", overdraw=true, linewidth=4)
+        # scatter!(ax, [x1, x2], [y1, y2], color=[colors[2i-1], colors[2i]])
+        sleep(0.5)
+        fig2
+    end
+    fig2
+    
+
+
+
+
+# evaluateregions
+c = first(C)
+regions = [[c[1]]]
+refidx = c[2]
+numregions = 1
+delete!(C, c)
+
+nextedges = Vector{DT.edge_type(tess)}()
+while length(C) > 0
+    # Writing out the for loop avoids a Core.box closure issue with `refidx`
+    # nextedges = [c for c in C if refidx in c]
+    for c in C
+        if c[1] == refidx
+            push!(nextedges, c)
+        end
+    end
+
+    if isempty(nextedges)
+        push!(regions[numregions], refidx)
+
+        c = first(C)
+        numregions += 1
+        push!(regions, [c[1]])
+        refidx = c[2]
+        delete!(C, c)
+    else
+        if length(nextedges) > 1
+            previdx = last(regions[numregions])
+            c = findnextedge(tess, previdx, refidx, nextedges)
+        else
+            c = only(nextedges)
+        end
+        push!(regions[numregions], c[1])
+        refidx = c[2]
+        delete!(C, c)
+    end
+    empty!(nextedges)
+end
+push!(regions[numregions], refidx)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+for r in regions
+    cmplxs = [reim(v) for v in complex.(DT.get_point(tess, r...))]
+
+    lines!(ax, cmplxs, color=HSV.(range(0, 360, length(cmplxs)), 50, 50), overdraw=true, linewidth=4)
 end
 #
 
@@ -144,11 +237,82 @@ for e in E
     # println(x2," ", y2)
     lines!(ax, [x1, x2], [y1, y2], color="white", overdraw=true, linewidth=4)
     scatter!(ax, [x1, x2], [y1, y2], color="white", overdraw=true, markersize=10)
-    i += 1
 end
 
-fig
+fig2
+
+
+
+
+
+
+
+zroots = Vector{complex(DT.number_type(tess))}()
+zpoles = similar(zroots)
+for r in regions
+    pts = get_point(tess, r...)
+    quadrantsequence = [RP.getquadrant(p) for p in pts]
+
+    # Sign flip because `r` are in opposite order of Matlab?
+    dq = diff(quadrantsequence)
+    for i in eachindex(dq)
+        if dq[i] == 3
+            dq[i] = -1
+        elseif dq[i] == -3
+            dq[i] = 1
+        elseif abs(dq[i]) == 2
+            # ``|ΔQ| = 2`` is ambiguous; cannot tell whether phase increases or
+            # decreases by two quadrants
+            dq[i] = 0
+        end
+    end
+    q = sum(dq)/4
+    z = sum(complex, pts)/length(pts)
+
+    if q > 0
+        push!(zroots, z)  # convert in case T isn't Float64
+    elseif q < 0
+        push!(zpoles, z)
+    end
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
