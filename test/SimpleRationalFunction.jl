@@ -19,9 +19,30 @@ matlab_zroots = [-0.999999999951224 - 0.000000000028656im,
 matlab_zpoles = [0.000000000380455 - 0.999999999701977im]
 
 
+function edgecolors(tess)
+    labels = zeros(Int, num_edges(tess))
+    for (i, e) in enumerate(each_solid_edge(tess))
+        a, b = get_point(tess, e[1], e[2])
+        ΔQ = mod(getquadrant(a) - getquadrant(b), 4)  # phase difference
+        if ΔQ == 2
+            labels[i] = 5
+        elseif ΔQ == 0
+            labels[i] = getquadrant(a)
+        end
+    end
+end
+
+
 #
 mesh = RP.QuadrantPoints(RP.QuadrantPoint.(origcoords))
 tess = RP.triangulate(mesh)
+RP.assignquadrants!(get_points(tess), simplefcn, false)
+pts = RP.getquadrant.(RP.each_point(tess))
+
+colors = Makie.wong_colors()[1:4]
+triplot(tess, point_color=colors[pts], show_all_points=true)
+
+# refine!(tess)
 tess, E = RP.tesselate!(tess, simplefcn, GRPFParams(1e-6))
 
 
