@@ -20,16 +20,29 @@ matlab_zpoles = [0.000000000380455 - 0.999999999701977im]
 
 
 function edgecolors(tess)
-    labels = zeros(Int, num_edges(tess))
-    for (i, e) in enumerate(each_solid_edge(tess))
+    labels = zeros(Int, 3*num_edges(tess))
+    xcoords = Vector{DT.number_type(tess)}(undef, 3*num_edges(tess))
+    ycoords = similar(xcoords)
+
+    i = 1
+    for e in each_solid_edge(tess)
         a, b = get_point(tess, e[1], e[2])
-        ΔQ = mod(getquadrant(a) - getquadrant(b), 4)  # phase difference
+        xcoords[i] = a.x
+        ycoords[i] = a.y
+        xcoords[i+1] = b.x
+        ycoords[i+1] = b.y
+        xcoords[i+2] = NaN
+        ycoords[i+2] = NaN
+
+        ΔQ = mod(RP.getquadrant(a) - RP.getquadrant(b), 4)  # phase difference
         if ΔQ == 2
-            labels[i] = 5
+            labels[i:i+2] .= 5
         elseif ΔQ == 0
-            labels[i] = getquadrant(a)
+            labels[i:i+2] .= RP.getquadrant(a)
         end
+        i += 3
     end
+    return xcoords, ycoords, labels
 end
 
 
@@ -38,8 +51,17 @@ mesh = RP.QuadrantPoints(RP.QuadrantPoint.(origcoords))
 tess = RP.triangulate(mesh)
 RP.assignquadrants!(get_points(tess), simplefcn, false)
 pts = RP.getquadrant.(RP.each_point(tess))
+ec = edgecolors(tess)
 
-colors = Makie.wong_colors()[1:4]
+using GLMakie; Makie.inline!(false)
+const wc = Makie.wong_colors()
+const co = Makie.color
+colors = [co("black"), wc[6], wc[7], wc[1], wc[3], wc[4]]
+fig = Figure()
+ax = Axis(fig, xlabel="Re", ylabel="Im")
+limits!(ax, (-1.5, 1.5), (-1.5, 1.5))
+lines!(ax, ex, ey, color=colors[ec.+1])
+
 triplot(tess, point_color=colors[pts], show_all_points=true)
 
 # refine!(tess)
