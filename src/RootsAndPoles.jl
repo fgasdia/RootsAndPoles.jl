@@ -185,15 +185,32 @@ function selectedges!(selectE, tess, E, tolerance)
 end
 
 """
-    addzone1node!(tess, p, q, tolerance)
+    addzone1nodes!(tess, z1edges, tolerance)
 
-Push the midpoint of `p` and `q` into `tess` if the distance between them is greater
-than `tolerance`.
+Push the midpoint of each edge into `tess` if the distance between them is greater
+than `tolerance` and the new vertex is unique.
 """
-function addzone1node!(tess, p, q, tolerance)
-    if distance(p, q) > tolerance
-        avgnode = (complex(p) + complex(q))/2
-        add_point!(tess, QuadrantPoint(avgnode))
+function addzone1nodes!(tess, z1edges, tolerance)
+    newnodes = Vector{complex(DT.number_type(tess))}()
+    for e in z1edges
+        a, b = complex.(get_point(tess, e[1], e[2]))
+        cn = (a + b)/2
+        elength = distance(b, a)
+        if elength > tolerance
+            # Possible edge case where candidate `cn` is within 2eps from a new node?
+            allseparate = true
+            for n in newnodes
+                dist = hypot(n - cn)
+                if dist < 2*eps(DT.number_type(tess))
+                    allseparate = false
+                    break
+                end
+            end
+            if allseparate
+                push!(newnodes, cn)
+                add_point!(tess, QuadrantPoint(cn))
+            end
+        end
     end
 end
 
@@ -215,49 +232,42 @@ function addzone2node!(tess, p, q, r, skinnytriangle)
 end
 
 """
-    splittriangles!(tess, unique_idxs, tolerance, skinnytriangle)
+    splittriangles!(tess, unique_idxs, tolerance=GRPFParams().tolerance, skinnytriangle=GRPFParams().skinnytriangle)
 
 Refine `tess` based on `unique_idxs` of select candidate edges.
 
 See also [`addzone1node!`](@ref), [`addzone2node!`](@ref).
 """
-function splittriangles!(tess, unique_idxs, tolerance, skinnytriangle)
-    triangles = Set{DT.triangle_type(tess)}()
-    edges = Set{DT.edge_type(tess)}()
-    for p1 in unique_idxs
-        adj2v = get_adjacent2vertex(tess, p1) 
-        for (p2, p3) in adj2v
-            sortedtri = DT.sort_triangle((p1, p2, p3))
-            if sortedtri in triangles
-                continue  # this triangle has already been visited
-            end
-            push!(triangles, sortedtri)
-            p, q, r = get_point(tess, p1, p2, p3)
+function splittriangles!(tess, unique_idxs,
+    tolerance=GRPFParams().tolerance, skinnytriangle=GRPFParams().skinnytriangle)
 
-            # zone1: > 1 node in unique_idxs
-            # zone2: 1 node in unique_idxs
-            if p2 in unique_idxs || p3 in unique_idxs
-                # (p1, p2, p3) is a zone 1 triangle
-                # Add a new node at the midpoint of each edge of (p1, p2, p3)
-                if !(sort_edge(p1, p2) in edges)
-                    addzone1node!(tess, p, q, tolerance)
-                    push!(edges, sort_edge(p1, p2))
-                end
-                if !(sort_edge(p1, p3) in edges)
-                    addzone1node!(tess, p, r, tolerance)
-                    push!(edges, sort_edge(p1, p3))
-                end
-                if !(sort_edge(p2, p3) in edges)
-                    addzone1node!(tess, q, r, tolerance)
-                    push!(edges, sort_edge(p2, p3))
-                end
+    # Determine which triangles are zone 1 and which are zone 2
+    triangles = Dict{DT.triangle_type(tess),Int}()
+    for w in unique_idxs
+        adj2v = get_adjacent2vertex(tess, w)
+        for (u, v) in adj2v
+            if haskey(triangles, sorttriangle(u, v, w))
+                triangles[sorttriangle(u, v, w)] += 1
             else
-                # (p1, p2, p3) is a zone 2 triangle
-                # Add a new node at the average of (p1, p2, p3) 
-                addzone2node!(tess, p, q, r, skinnytriangle)
+                triangles[sorttriangle(u, v, w)] = 1
             end
         end
     end
+
+    z1edges = Vector{DT.edge_type(tess)}()
+    for (t, c) in triangles
+        u, v, w = indices(t)
+        p, q, r = get_point(tess, u, v, w)
+        if c == 1
+            addzone2node!(tess, p, q, r, skinnytriangle)
+        else
+            # c > 1
+            push!(z1edges, sortedge(u, v), sortedge(v, w), sortedge(w, u))
+        end
+    end
+    sort!(z1edges)
+    unique!(z1edges)
+    addzone1nodes!(tess, z1edges, tolerance)
 end
 
 function triangleedges(tess, E)
@@ -509,13 +519,13 @@ function rootsandpoles(tess, regions)
 end
 
 """
-    tesselate!(tess, fcn, params, pd=nothing)
+    tesselate!(tess, fcn, params=GRPFParams(), pd=nothing)
 
 Label quadrants, identify candidate edges, and iteratively split triangles, returning
 the tuple `(tess, E)` where `tess` is the refined tesselation and `E` is a collection of
 edges that are candidates for being in the vicinity of a root or pole.
 """
-function tesselate!(tess, fcn, params, pd::Union{Nothing,PlotData}=nothing)
+function tesselate!(tess, fcn, params=GRPFParams(), pd::Union{Nothing,PlotData}=nothing)
     # It's more efficient to `empty!` the sets in the loop than it is to create and allocate
     # them from scratch
     E = Set{DT.edge_type(tess)}()  # edges
@@ -547,10 +557,10 @@ function tesselate!(tess, fcn, params, pd::Union{Nothing,PlotData}=nothing)
 
     # Assign quadrants and candidate edges for triangles split at end of last loop
     assignquadrants!(get_points(tess), fcn, params.multithreading)
-    candidateedges!(E, tess, pd)
+    # candidateedges!(E, tess, pd)
 
-    iteration >= params.maxiterations && @warn "$(iteration) iterations. `params.maxiterations` reached."
-    num_vertices(tess) >= params.maxnodes && @warn "Tesselation has $(num_vertices(tess)) vertices. `params.maxnodes` reached."
+    iteration >= params.maxiterations && @info "$(iteration) iterations. `params.maxiterations` reached."
+    num_vertices(tess) >= params.maxnodes && @info "Tesselation has $(num_vertices(tess)) vertices. `params.maxnodes` reached."
 
     return tess, E
 end

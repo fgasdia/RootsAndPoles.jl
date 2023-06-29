@@ -19,48 +19,83 @@ matlab_zroots = [-0.999999999951224 - 0.000000000028656im,
 matlab_zpoles = [0.000000000380455 - 0.999999999701977im]
 
 
-function edgecolors(tess)
-    labels = zeros(Int, 3*num_edges(tess))
-    xcoords = Vector{DT.number_type(tess)}(undef, 3*num_edges(tess))
-    ycoords = similar(xcoords)
-
-    i = 1
-    for e in each_solid_edge(tess)
-        a, b = get_point(tess, e[1], e[2])
-        xcoords[i] = a.x
-        ycoords[i] = a.y
-        xcoords[i+1] = b.x
-        ycoords[i+1] = b.y
-        xcoords[i+2] = NaN
-        ycoords[i+2] = NaN
-
-        ΔQ = mod(RP.getquadrant(a) - RP.getquadrant(b), 4)  # phase difference
-        if ΔQ == 2
-            labels[i:i+2] .= 5
-        elseif ΔQ == 0
-            labels[i:i+2] .= RP.getquadrant(a)
-        end
-        i += 3
-    end
-    return xcoords, ycoords, labels
-end
-
-
 #
 mesh = RP.QuadrantPoints(RP.QuadrantPoint.(origcoords))
 tess = RP.triangulate(mesh)
-RP.assignquadrants!(get_points(tess), simplefcn, false)
-pts = RP.getquadrant.(RP.each_point(tess))
-ec = edgecolors(tess)
+# RP.assignquadrants!(get_points(tess), simplefcn, false)
+# pts = RP.getquadrant.(RP.each_point(tess))
+
+
+RP.tesselate!(tess, simplefcn)
+
+
+for nc in newcoords
+    add_point!(tess, RP.QuadrantPoint(nc))
+end
+
+ex, ey, ec = RP.edgecolors(tess)
 
 using GLMakie; Makie.inline!(false)
 const wc = Makie.wong_colors()
 const co = Makie.color
-colors = [co("black"), wc[6], wc[7], wc[1], wc[3], wc[4]]
-fig = Figure()
-ax = Axis(fig, xlabel="Re", ylabel="Im")
-limits!(ax, (-1.5, 1.5), (-1.5, 1.5))
+colors = [co("black"), wc[6], wc[7], wc[3], wc[1], wc[4]]
+fig = Figure(resolution=(600,500))
+ax = Axis(fig[1,1], xlabel="Re", ylabel="Im")
+limits!(ax, (-2, 2), (-2, 2))
+# limits!(ax, (-1-1e-7, -1+1e-7), (-1e-7, 1e-7))
 lines!(ax, ex, ey, color=colors[ec.+1])
+fig
+
+
+
+E = Set{DT.edge_type(tess)}()  # edges
+selectE = Set{DT.edge_type(tess)}()
+RP.assignquadrants!(get_points(tess), simplefcn, false)
+RP.candidateedges!(E, tess)
+RP.selectedges!(selectE, tess, E, GRPFParams().tolerance)
+unique_idxs = Set(Iterators.flatten(selectE))
+RP.splittriangles!(tess, unique_idxs)
+RP.assignquadrants!(get_points(tess), simplefcn, false)
+
+
+triangles = Set{DT.triangle_type(tess)}()
+edges = Set{DT.edge_type(tess)}()
+for p1 in unique_idxs
+    adj2v = get_adjacent2vertex(tess, p1) 
+    for (p2, p3) in adj2v
+        sortedtri = DT.sort_triangle((p1, p2, p3))
+        if sortedtri in triangles
+            continue  # this triangle has already been visited
+        end
+        push!(triangles, sortedtri)
+        p, q, r = get_point(tess, p1, p2, p3)
+
+        # zone1: > 1 node in unique_idxs
+        # zone2: 1 node in unique_idxs
+        if p2 in unique_idxs || p3 in unique_idxs
+            # (p1, p2, p3) is a zone 1 triangle
+            # Add a new node at the midpoint of each edge of (p1, p2, p3)
+            if !(sort_edge(p1, p2) in edges)
+                addzone1node!(tess, p, q, tolerance)
+                push!(edges, sort_edge(p1, p2))
+            end
+            if !(sort_edge(p1, p3) in edges)
+                addzone1node!(tess, p, r, tolerance)
+                push!(edges, sort_edge(p1, p3))
+            end
+            if !(sort_edge(p2, p3) in edges)
+                addzone1node!(tess, q, r, tolerance)
+                push!(edges, sort_edge(p2, p3))
+            end
+        else
+            # (p1, p2, p3) is a zone 2 triangle
+            # Add a new node at the average of (p1, p2, p3) 
+            addzone2node!(tess, p, q, r, skinnytriangle)
+        end
+    end
+end
+
+
 
 triplot(tess, point_color=colors[pts], show_all_points=true)
 

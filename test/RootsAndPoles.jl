@@ -145,6 +145,92 @@ function test_addzone2node!()
     @test (2/3)+(1/3)im in complex.(get_points(tess))
 end
 
+"Different implementation of splittriangles for comparison with `RP.splittriangles!`."
+function alternatesplittriangles(tess, unique_idxs)
+    # Determine which triangles are zone 1 and which are zone 2
+    triangles = Dict{DT.triangle_type(tess),Int}()
+    for w in unique_idxs
+        adj2v = get_adjacent2vertex(tess, w)
+        for (u, v) in adj2v
+            if haskey(triangles, RP.sorttriangle(u, v, w))
+                triangles[RP.sorttriangle(u, v, w)] += 1
+            else
+                triangles[RP.sorttriangle(u, v, w)] = 1
+            end
+        end
+    end
+
+    # Zone 1
+    z1edges = Vector{DT.edge_type(tess)}()
+    for (t, c) in triangles
+        if c > 1
+            u, v, w = indices(t)
+            push!(z1edges, (u, v))
+            push!(z1edges, (v, w))
+            push!(z1edges, (w, u))
+        end
+    end
+    newcoords = Vector{ComplexF64}()
+    a, b = complex.(get_point(tess, first(z1edges)...))
+    push!(newcoords, (a + b)/2)
+    for e in z1edges[2:end]
+        a, b = complex.(get_point(tess, e...))
+        nc = (a + b)/2
+        # elength = sqrt(sum(([reim(b)...]-[reim(a)...]).^2))
+        elength = hypot(b - a)
+        if elength > GRPFParams().tolerance
+            # This makes sure that all the new coordinates are unique
+            dist = hypot.(newcoords .- nc)
+            if all(>(2*eps()), dist)
+                push!(newcoords, nc)
+            end
+        end
+    end
+    # Go back and check the first new node in case it's too short
+    a, b = complex.(get_point(tess, first(z1edges)...))
+    elength = hypot(b - a)
+    if elength < GRPFParams().tolerance
+        popfirst!(newcoords)
+    end
+
+    # Zone 2
+    for (t, c) in triangles
+        if c == 1
+            u, v, w = indices(t)
+            a, b, c = complex.(get_point(tess, u, v, w))
+            el1 = hypot(b - a)
+            el2 = hypot(c - b)
+            el3 = hypot(a - c)
+            if max(el1, el2, el3)/min(el1, el2, el3) > GRPFParams().skinnytriangle
+                nc = (a + b + c)/3
+                push!(newcoords, nc)
+            end
+        end
+    end
+    return newcoords
+end
+
+function test_splittriangles!()
+    simplefcn(z) = (z - 1)*(z - im)^2*(z + 1)^3/(z + im)
+    origcoords = rectangulardomain(complex(-2, -2), complex(2, 2), 0.1)
+
+    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(origcoords))
+    tess = RP.triangulate(mesh)
+    orignumpoints = num_points(tess)
+
+    E = Set{DT.edge_type(tess)}()  # edges
+    selectE = Set{DT.edge_type(tess)}()
+    RP.assignquadrants!(get_points(tess), simplefcn, false)
+    RP.candidateedges!(E, tess)
+    RP.selectedges!(selectE, tess, E, GRPFParams().tolerance)
+    unique_idxs = Set(Iterators.flatten(selectE))
+    newcoords = alternatesplittriangles(tess, unique_idxs)
+
+    RP.splittriangles!(tess, unique_idxs)
+    newnumpoints = num_points(tess)
+    @test newnumpoints - orignumpoints == length(newcoords)
+end
+
 function test_tesselate!()
     mesh = RP.QuadrantPoints(RP.QuadrantPoint.(Hfcn_mesh()))
     tess = RP.triangulate(mesh)
