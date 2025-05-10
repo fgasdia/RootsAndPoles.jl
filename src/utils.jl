@@ -3,6 +3,8 @@ distance((p1, p2)::Tuple{Complex, Complex}) = distance(p1, p2)
 distance(a::QuadrantPoint, b::QuadrantPoint) = distance(complex(a), complex(b))
 distance((a, b)::Tuple{QuadrantPoint, QuadrantPoint}) = distance(complex(a), complex(b))
 
+edgelength(e, tess) = distance(get_point(tess, e[1], e[2]))
+
 function sortedge(p1, p2)
     if p1 < p2
         return p1, p2

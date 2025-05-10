@@ -8,7 +8,9 @@ DelaunayTriangulation = "927a84f5-c5f4-47a5-9785-b46e178433df"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [compat]
-julia = "1.7"
+julia = "1.10"
+DelaunayTriangulation = "1"
+LinearAlgebra = "1"
 
 [extras]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"

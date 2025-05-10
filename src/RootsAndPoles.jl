@@ -1,5 +1,3 @@
-__precompile__(true)
-
 """
     RootsAndPoles.jl
 
@@ -111,23 +109,26 @@ function quadrant(z)
 end
 
 """
-    assignquadrants!(points, f, multithreading=false)
+    assignquadrants!(tess, f, multithreading=false)
 
-If the point quadrant is 0, evaluate function `f` for [`quadrant`](@ref) at each of `points`
-and update each point in-place.
+If the point quadrant is 0, evaluate function `f` for [`quadrant`](@ref) at each solid
+vertex of `tess` and update the quadrant of each point in-place.
 """
-function assignquadrants!(points, f, multithreading=false)
+function assignquadrants!(tess, f, multithreading=false)
+    # each_solid_vertex below will not return indices of ghost points
     if multithreading
-        @threads for p in points
+        @threads for i in each_solid_vertex(tess)
+            p = get_point(points, i)
             if getquadrant(p) == 0
-                Q = quadrant(f(complex(p)))
+                Q = quadrant(f(complex(p.x, p.y)))
                 setquadrant!(p, Q)
             end
         end
     else
-        for p in points
+        for i in each_solid_vertex(tess)
+            p = get_point(points, i)
             if getquadrant(p) == 0
-                Q = quadrant(f(complex(p)))
+                Q = quadrant(f(complex(p.x, p.y)))
                 setquadrant!(p, Q)
             end
         end
@@ -135,7 +136,7 @@ function assignquadrants!(points, f, multithreading=false)
 end
 
 """
-    candidateedges!(E, tess, pd=nothing)
+    fillcandidateedges!(E, tess, pd=nothing)
 
 Empty candidate edges `E` and push edges from `tess` that contain a phase change of 2
 quadrants.
@@ -150,14 +151,14 @@ root or pole.
 
 `E` is not sorted.
 """
-function candidateedges!(E, tess, pd=nothing)
+function fillcandidateedges!(E, tess, pd=nothing)
     empty!(E)
     for edge in each_solid_edge(tess)
         _candidateedge!(E, tess, edge)
     end
 end
 
-function candidateedges!(E, tess, pd::PlotData)
+function fillcandidateedges!(E, tess, pd::PlotData)
     empty!(E)
     empty!(pd.phasediffs)
     for edge in each_solid_edge(tess)
@@ -526,17 +527,15 @@ the tuple `(tess, E)` where `tess` is the refined tesselation and `E` is a colle
 edges that are candidates for being in the vicinity of a root or pole.
 """
 function tesselate!(tess, fcn, params=GRPFParams(), pd::Union{Nothing,PlotData}=nothing)
-    # It's more efficient to `empty!` the sets in the loop than it is to create and allocate
-    # them from scratch
-    E = Set{DT.edge_type(tess)}()  # edges
-    selectE = Set{DT.edge_type(tess)}()
+    E = Vector{DT.edge_type(tess)}()  # edges
+    selectE = similar(E)
 
     iteration = 0
     while iteration < params.maxiterations && num_vertices(tess) < params.maxnodes
         iteration += 1
 
         # Evaluate the function `fcn` for the quadrant at each node
-        assignquadrants!(get_points(tess), fcn, params.multithreading)
+        assignquadrants!(tess, fcn, params.multithreading)
 
         # Determine candidate edges that may be near a root or pole
         # Candidate edges are those where the phase change |ΔQ| = 2
@@ -556,6 +555,7 @@ function tesselate!(tess, fcn, params=GRPFParams(), pd::Union{Nothing,PlotData}=
     end
 
     # Assign quadrants and candidate edges for triangles split at end of last loop
+    # TODO: BUG: Replace get_points with each_solid_vertex and then get_point
     assignquadrants!(get_points(tess), fcn, params.multithreading)
     # candidateedges!(E, tess, pd)
 
@@ -600,6 +600,8 @@ julia> poles
 """
 function grpf(fcn, initial_mesh, params=GRPFParams())
     mesh_points = QuadrantPoints(QuadrantPoint.(initial_mesh))
+
+    # TODO: triangulate uses an rng. It should be part of GRPFParams
     tess = triangulate(mesh_points)  # WARN: modifying `mesh_points` modifies `tess` in place
     
     tess, E = tesselate!(tess, fcn, params)
