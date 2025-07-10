@@ -19,6 +19,12 @@ import Base.Threads.@threads
 using DelaunayTriangulation
 const DT = DelaunayTriangulation
 
+const GRPFParams_maxiterations = 100
+const GRPFParams_maxnodes = 500000
+const GRPFParams_skinnytriangle = 3
+const GRPFParams_tolerance = 1e-9
+const GRPFParams_multithreading = false
+
 """
     GRPFParams
 
@@ -52,7 +58,8 @@ struct GRPFParams
         new(maxiterations, maxnodes, skinnytriangle, tolerance, multithreading)
     end
 end
-GRPFParams() = GRPFParams(100, 500000, 3, 1e-9, false)
+GRPFParams() = GRPFParams(GRPFParams_maxiterations, GRPFParams_maxnodes,
+    GRPFParams_skinnytriangle, GRPFParams_tolerance, GRPFParams_multithreading)
 
 """
     GRPFParams(tolerance, multithreading=false)
@@ -61,7 +68,8 @@ Convenience function for creating a `GRPFParams` object with the most important 
 `tolerance`, and `multithreading`.
 """
 GRPFParams(tolerance, multithreading=false) =
-    GRPFParams(100, 500000, 3, tolerance, multithreading)
+    GRPFParams(GRPFParams_maxiterations, GRPFParams_maxnodes, GRPFParams_skinnytriangle,
+    tolerance, multithreading)
 
 function Base.isequal(a::GRPFParams, b::GRPFParams)
     for n in fieldnames(GRPFParams)
@@ -114,27 +122,29 @@ end
 If the point quadrant is 0, evaluate function `f` for [`quadrant`](@ref) at each solid
 vertex of `tess` and update the quadrant of each point in-place.
 """
-function assignquadrants!(tess, f, multithreading=false)
-    # each_solid_vertex below will not return indices of ghost points
+function assignquadrants!(geom, f, multithreading=false)
     if multithreading
-        @threads for i in each_solid_vertex(tess)
-            p = get_point(points, i)
-            if getquadrant(p) == 0
-                Q = quadrant(f(complex(p.x, p.y)))
-                setquadrant!(p, Q)
+        @threads for i in each_solid_vertex(tri)
+            p = get_point(tri, i)
+            px, py = getxy(p)
+            if get_quadrant(geom, i) == 0
+                Q = quadrant(f(complex(px, py)))
+                set_quadrant!(geom, i, Q)
             end
         end
     else
-        for i in each_solid_vertex(tess)
-            p = get_point(points, i)
-            if getquadrant(p) == 0
-                Q = quadrant(f(complex(p.x, p.y)))
-                setquadrant!(p, Q)
+        for i in each_solid_vertex(tri)
+            p = get_point(tri, i)
+            px, py = getxy(p)
+            if get_quadrant(geom, i) == 0
+                Q = quadrant(f(complex(px, py)))
+                set_quadrant!(geom, i, Q)
             end
         end
     end
 end
 
+# TODO: Update doc string
 """
     fillcandidateedges!(E, tess, pd=nothing)
 
@@ -151,38 +161,30 @@ root or pole.
 
 `E` is not sorted.
 """
-function fillcandidateedges!(E, tess, pd=nothing)
-    empty!(E)
-    for edge in each_solid_edge(tess)
-        _candidateedge!(E, tess, edge)
-    end
-end
-
-function fillcandidateedges!(E, tess, pd::PlotData)
-    empty!(E)
-    empty!(pd.phasediffs)
-    for edge in each_solid_edge(tess)
-        _candidateedge!(E, tess, edge)
-        push!(pd.phasediffs, ΔQ)
-    end
-end
-
-function _candidateedge!(E, tess, edge)
-    a, b = get_point(tess, edge[1], edge[2])
-    ΔQ = mod(getquadrant(a) - getquadrant(b), 4)  # phase difference
-    if ΔQ == 2
-        push!(E, edge)
-    end
-end
-
-function selectedges!(selectE, tess, E, tolerance)
-    empty!(selectE)
-    for e in E
-        d = distance(get_point(tess, e[1], e[2]))
-        if d > tolerance
-            push!(selectE, e)
+function candidateedges(geom)
+    cedges = Set{NTuple{2,Int}}()  # TODO can be a vector - only keep as a set if useful later
+    tri = geom.triangulation
+    for (a, b) in each_solid_edge(tri)
+        ΔQ = mod(get_quadrant(geom, a) - get_quadrant(geom, b), 4)  # phase difference
+        if ΔQ == 2
+            push!(cedges, (a, b))
         end
     end
+    return cedges
+end
+
+"Unique vertices of edges longer than `tolerance`"
+function longedgevertices(geom, E, tolerance)
+    vertices = Set{Int}()
+    tri = geom.triangulation
+    for (a, b) in E
+        p, q = get_point(tri, a, b)
+        l = hypot(q - p)
+        if l > tolerance
+            push!(vertices, a, b)
+        end
+    end
+    return vertices
 end
 
 """
@@ -239,26 +241,25 @@ Refine `tess` based on `unique_idxs` of select candidate edges.
 
 See also [`addzone1node!`](@ref), [`addzone2node!`](@ref).
 """
-function splittriangles!(tess, unique_idxs,
-    tolerance=GRPFParams().tolerance, skinnytriangle=GRPFParams().skinnytriangle)
+function splittriangles!(geom, vertices, tolerance, skinnytriangle)
+    tri = geom.triangulation
 
     # Determine which triangles are zone 1 and which are zone 2
-    triangles = Dict{DT.triangle_type(tess),Int}()
-    for w in unique_idxs
-        adj2v = get_adjacent2vertex(tess, w)
-        for (u, v) in adj2v
-            if haskey(triangles, sorttriangle(u, v, w))
-                triangles[sorttriangle(u, v, w)] += 1
+    triangles = Dict{NTuple{3,Int},Int}()
+    for w in vertices
+        for (u, v) in get_adjacent2vertex(tri, w)
+            if haskey(triangles, DT.sort_triangle(u, v, w))
+                triangles[DT.sort_triangle(u, v, w)] += 1
             else
-                triangles[sorttriangle(u, v, w)] = 1
+                triangles[DT.sort_triangle(u, v, w)] = 1
             end
         end
     end
 
-    z1edges = Vector{DT.edge_type(tess)}()
+    z1edges = Vector{NTuple{2,Int}}()
     for (t, c) in triangles
-        u, v, w = indices(t)
-        p, q, r = get_point(tess, u, v, w)
+        u, v, w = triangle_vertices(t)
+        p, q, r = get_point(tri, u, v, w)
         if c == 1
             addzone2node!(tess, p, q, r, skinnytriangle)
         else
@@ -526,32 +527,26 @@ Label quadrants, identify candidate edges, and iteratively split triangles, retu
 the tuple `(tess, E)` where `tess` is the refined tesselation and `E` is a collection of
 edges that are candidates for being in the vicinity of a root or pole.
 """
-function tesselate!(tess, fcn, params=GRPFParams(), pd::Union{Nothing,PlotData}=nothing)
-    E = Vector{DT.edge_type(tess)}()  # edges
-    selectE = similar(E)
-
+function tesselate!(geom, fcn, params=GRPFParams(), pd::Union{Nothing,PlotData}=nothing)
     iteration = 0
-    while iteration < params.maxiterations && num_vertices(tess) < params.maxnodes
+    while iteration < params.maxiterations && num_solid_vertices(tess) < params.maxnodes
         iteration += 1
 
         # Evaluate the function `fcn` for the quadrant at each node
-        assignquadrants!(tess, fcn, params.multithreading)
+        assignquadrants!(geom, fcn, params.multithreading)
 
         # Determine candidate edges that may be near a root or pole
         # Candidate edges are those where the phase change |ΔQ| = 2
-        candidateedges!(E, tess, pd)
-        isempty(E) && return tess, E
+        E = candidateedges(geom)
+        isempty(E) && return
 
         # Select candidate edges that are longer than `tolerance`
-        selectedges!(selectE, tess, E, params.tolerance)
-        isempty(selectE) && return tess, E
-
-        # Get unique indices of points in `selectE`
-        unique_idxs = Set(Iterators.flatten(selectE))
+        vertices = longedgevertices(geom, E, params.tolerance)
+        isempty(vertices) && return
 
         # Refine tesselation
         # TODO: pass pd to store the point at every iteration
-        splittriangles!(tess, unique_idxs, params.tolerance, params.skinnytriangle)
+        splittriangles!(geom, vertices, params.tolerance, params.skinnytriangle)
     end
 
     # Assign quadrants and candidate edges for triangles split at end of last loop
@@ -562,7 +557,7 @@ function tesselate!(tess, fcn, params=GRPFParams(), pd::Union{Nothing,PlotData}=
     iteration >= params.maxiterations && @info "$(iteration) iterations. `params.maxiterations` reached."
     num_vertices(tess) >= params.maxnodes && @info "Tesselation has $(num_vertices(tess)) vertices. `params.maxnodes` reached."
 
-    return tess, E
+    return nothing
 end
 
 """
@@ -599,12 +594,12 @@ julia> poles
 ```
 """
 function grpf(fcn, initial_mesh, params=GRPFParams())
-    mesh_points = QuadrantPoints(QuadrantPoint.(initial_mesh))
 
     # TODO: triangulate uses an rng. It should be part of GRPFParams
-    tess = triangulate(mesh_points)  # WARN: modifying `mesh_points` modifies `tess` in place
+    tri = triangulate(mesh)  # WARN: modifying `mesh_points` modifies `tess` in place
     
-    tess, E = tesselate!(tess, fcn, params)
+    geom = RPGeometry(tri)
+    tesselate!(geom, fcn, params)
 
     # TODO: test for type stability when no roots or poles in domain of initial_mesh
     isempty(E) && return Vector{complex(DT.number_type(tess))}(), Vector{complex(DT.number_type(tess))}()
