@@ -1,3 +1,191 @@
+#==
+o Structs
+    x ComplexMesh
+    x FinderParams
+    o SpecialEdge ?
+    o MeshIterations: are lengths correct?
+    o PreviousIteration ?
+    x GradientAnalysis : empty!
+
+o interfaces
+    o rootsandpoles
+        o ReturnMultiplicity
+        o SkinnyMode
+        o MeshIterations
+        o test # of maxnodes is obeyed, maxiter, etc
+
+o functions
+    o trianglegradient: confirm grad algorithm to matlab expression?
+    o analyzegradients!: make a plot to confirm it's working?
+    o evalfcn!: confirm that ComplexMesh is updating, that threads are used, etc
+
+
+# tests
+o contouredges, increment_solid!, and edgekey: time this approach vs minmax on edge
+==#
+
+
+# TODO: Does max length keep getting shorter over iterations?
+# TODO: large and small tolerance
+# TODO: Write test comparing skinnymode criteria
+# TODO: Test with dense initial coords and sparse initial coords
+# TODO: Make sure it works to take the modified mesh and use it as starting point for new rootsandpoles? need to set startidx
+
+@testset "FinderParams" begin
+    @test isconcretetype(FinderParams)
+
+    pa = FinderParams()
+    pb = FinderParams(1e-9, 1000, 2000, 10000, 1)
+    pc = FinderParams(tol=1e-8)
+
+    @test pa == pb
+    @test pa != pc
+end
+
+@testset "ComplexMesh" begin
+    coords = [-1-1im, 1-1im, 1+1im, -1+1im]
+    scoords = reim.(float(coords))
+    a = @inferred ComplexMesh(coords)
+    b = @inferred ComplexMesh(coords; rng=Random.default_rng())
+    c = @inferred ComplexMesh(scoords)
+
+    @test a.coords == b.coords
+    @test a.coords == c.coords
+
+    @test num_solid_vertices(a) == DT.num_solid_vertices(a.tri)
+    @test length(coords) == length(a.coords)
+    @test length(a.coords) == DT.num_solid_vertices(a.tri)
+    @test length(a.coords) == length(a.fvals)
+
+    @test lastindex(a) == lastindex(a.coords)
+    
+    d = copy(a)
+    @test d.coords == a.coords
+    @test d.fvals == a.fvals
+    @test d.tri == a.tri
+    @test d.rng == a.rng
+
+    push!(d.coords, (0.0, 0.0))
+    @test a.coords != d.coords
+
+    push!(c.coords, (0.0, 0.0))
+    @test c.coords == scoords  # modifies scoords in-place
+
+    # types
+    @test DT.triangle_type(a.tri) == RP.TRIANGLETYPE
+    @test DT.edge_type(a.tri) == RP.EDGETYPE
+    @test DT.number_type(a.tri) == Float64
+
+    # coord
+    c1 = @inferred RP.coord(a, 1)
+    c2 = @inferred RP.coord(a, 1, 2)
+    coordtype = NTuple{2, Float64}
+    @test c1 isa coordtype
+    @test c2 isa Tuple{coordtype, coordtype}
+
+    for i in eachindex(coords)
+        cai = RP.coord(a,i)
+        @test cai == reim(float(coords[i]))
+        @test cai == DT.get_point(a.tri, i)
+    end
+
+    # fval
+    f1 = @inferred RP.fval(a, 1)
+    f2 = @inferred RP.fval(a, 1, 2)
+    ftype = ComplexF64
+    @test f1 isa ftype
+    @test f2 isa Tuple{ftype, ftype}
+    fs = @inferred RP.fvals(a)
+    @test fs == a.fvals
+    RP.fval(a, 1) == 0.123 ? (testval = 0.222) : (testval = 0.123)
+    @inferred RP.fval!(a, 1, testval)
+    @test RP.fval(a, 1) == testval
+
+    # quadrant
+    q1 = @inferred RP.quadrant(b, 1)
+    q2 = @inferred RP.quadrant(b, 1, 2)
+    @test length(q1) == 1
+    @test length(q2) == 2
+    @test q1 == RP.quadrant(RP.fval(b, 1))
+
+    # edge_length
+    firstedge = first(each_solid_edge(a.tri))
+    e1 = @inferred RP.edge_length(a, firstedge)
+    @test e1 == DT.edge_length(a.tri, firstedge)
+    @test e1 isa Float64
+
+    # each_solid_...
+    @inferred RP.each_solid_edge(a)
+    @inferred RP.each_solid_triangle(a)
+    
+    # get_...
+    @inferred RP.get_adjacent(a, firstedge)
+    @inferred RP.get_adjacent(a, firstedge[1], firstedge[2])
+    @inferred RP.get_neighbours(a, 1)
+
+    # midpoint
+    m = @inferred RP.midpoint(a, 1, 2)
+    @test m == (0.0, -1.0)  # between (-1, -1) and (1, -1)
+
+    # addpoints
+    @test length(scoords) > num_solid_vertices(c)  # we pushed to scoords above
+    @inferred RP.addpoints!(c)
+    for i in eachindex(scoords)
+        @test DT.get_point(c.tri, i) == scoords[i]
+    end
+
+    # rng
+    rng1 = Random.MersenneTwister()
+    rng2 = Random.Xoshiro()
+    r1 = ComplexMesh(coords; rng=rng1)
+    r2 = ComplexMesh(coords; rng=rng2)
+    @test r1.rng == rng1
+    @test r2.rng == rng2
+
+    @testset "evalfcn!" begin
+        fun = abs2
+        @inferred RP.evalfcn!(fun, a, 1)
+
+        @test RP.fval(a, 2) == fun(coords[2])
+        @test RP.fval(a, 3) == fun(coords[3])
+
+        @test RP.quadrant(a, 2) == RP.quadrant(fun(coords[2]))
+        @test RP.quadrant(a, 3) == RP.quadrant(fun(coords[3]))
+
+        fun2(z) = 3
+        RP.evalfcn!(fun2, a, 3)  # only apply fun2 to indices 3 and 4
+
+        @test RP.fval(a, 2) == fun(complex(coords[2]))
+        @test RP.fval(a, 3) == fun2(complex(coords[3]))
+    end
+end
+
+@testset "GradientAnalysis" begin
+    @test isconcretetype(RP.GradientAnalysis)
+
+    ga = RP.GradientAnalysis(
+        Dict{RP.TRIANGLETYPE,SVector{2,Float64}}(),
+        Vector{Float64}(),
+        Vector{Float64}()
+    )
+    push!(ga.gradients, 
+        (1,2,3)=>SVector(0.0,0.0), (4,5,6)=>SVector(0.0, 1.0), (7,8,9)=>SVector(1.0,1.5)
+    )
+    push!(ga.indicators, 0.0, 0.1, 0.2, 0.3)
+    push!(ga.remainingedgelengths, 1.0, 2.0, 3.0, 4.0)
+
+    @test length(ga.indicators) == 4
+    @test length(ga.remainingedgelengths) == 4
+    @test length(ga.gradients) == 3
+
+    @inferred empty!(ga)
+    for f in fieldnames(typeof(ga))
+        @test isempty(getfield(ga, f))
+    end
+end
+
+########
+
 Hfcn(z) = (z + 2)/(z^2 + 1/4)  # zero: -2 and poles: ±im/2
 Hfcn_mesh() = rectangulardomain(complex(-3, -1), complex(1, 1), 0.6)
 
@@ -33,8 +221,6 @@ function Hfcn_plot()
     RP.assignquadrants!(get_points(tess), Hfcn, false)
     triplot!(ax, tess, triangle_color=colors[RP.getquadrant.(get_points(tess))], point_color=colors[pts])
 
-
-
     scatter!(ax, reim.(initial_mesh), color=colors[pts], markersize=10)
     elements = [PolyElement(polycolor = colors[i]) for i in 1:4]
     Legend(f[1,2], elements, string.(1:4), label="Quadrant")
@@ -43,288 +229,24 @@ function Hfcn_plot()
     RP.assignquadrants!(get_points(mesh), Hfcn, false)
     newpts = RP.getquadrant.(RP.each_point(mesh))
     scatter!(ax, reim.(complex.(mesh)), color=colors[newpts], markersize=20)
-
 end
 
-function test_GRPFParams()
-    ga = GRPFParams()
-    gb = GRPFParams(100, 500000, 3, 1e-9, false)
-    gc = GRPFParams(200, 10000, 3, 1e-8, true)
+@testset "deduplication" begin
+    @test RP.toldigits(1e-9) == 8
+    @test RP.toldigits(5e-9) == 8
+    @test RP.toldigits(1e-3) == 2
+    @test RP.toldigits(1) == -1
+    @test RP.toldigits(10) == -2
 
-    # equality
-    @test ga == gb
-    @test ga != gc
-
-    # constructors
-    @test GRPFParams(1e-3) == GRPFParams(100, 500000, 3, 1e-3, false)
-    @test GRPFParams(1e-3, true) == GRPFParams(100, 500000, 3, 1e-3, true)
-end
-
-function test_assignquadrants!()
-    pts = Hfcn_mesh()
-
-    # multithreading = false
-    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(pts))
-    tess = triangulate(mesh)
-    @test iszero(RP.getquadrant.(get_points(tess)))  
-    RP.assignquadrants!(get_points(tess), Hfcn, false)
-    @test RP.getquadrant.(mesh.points) == RP.quadrant.(Hfcn.(pts))
-
-    # multithreading = true
-    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(pts))
-    tess = triangulate(mesh)
-    RP.assignquadrants!(get_points(tess), Hfcn, true)
-    @test RP.getquadrant.(get_points(tess)) == RP.quadrant.(Hfcn.(pts))
-end
-
-# function test_newset()
-#     S = Set{Tuple{Int,Int}}()
-#     for _ in 1:100
-#         s = (rand(1:100), rand(1:100))
-#         push!(S, s)
-#     end
-#     return S
-# end
-
-# S = Set{Tuple{Int,Int}}(tuple.(rand(1:100, 100), rand(1:100, 100)))
-# function test_emptyset(S)
-#     empty!(S)
-#     for _ in 1:100
-#         s = (rand(1:100), rand(1:100))
-#         push!(S, s)
-#     end
-#     return S
-# end
-
-function test_candidateedges!()  
-    initial_mesh = Hfcn_mesh()
-    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
-    tess = RP.triangulate(mesh)
-    RP.assignquadrants!(get_points(tess), Hfcn, false)
-
-    E = Set{Tuple{Int, Int}}()
-    RP.candidateedges!(E, tess)
-
-    for e in E
-        a, b = RP.get_point(tess, e...)
-        @test abs(RP.getquadrant(a) - RP.getquadrant(b)) == 2
-    end
-
-    # TODO: test the PlotData argument
-end
-
-function test_selectedges!()
-    E = Set{Tuple{Int, Int}}()
-    selectE = Set{Tuple{Int, Int}}()
-    initial_mesh = Hfcn_mesh()
-    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
-    tess = RP.triangulate(mesh)
-    RP.assignquadrants!(get_points(tess), Hfcn, false)
-    RP.candidateedges!(E, tess)
-
-    RP.selectedges!(selectE, tess, E, GRPFParams().tolerance)
-    @test selectE == E
-
-    RP.selectedges!(selectE, tess, E, 1)
-    @test isempty(selectE)
-end
-
-function test_addzone1node!()
-    initial_mesh = [0+0im, 1+0im, 1+1im, 0+1im]
-    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
-    tess = RP.triangulate(mesh)
-    RP.addzone1node!(tess, 0+0im, 1+1im, GRPFParams().tolerance)
-    @test 0.5+0.5im in complex.(get_points(tess))
-end
-
-function test_addzone2node!()
-    initial_mesh = [0+0im, 1+0im, 1+1im, 0+1im]
-    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
-    tess = RP.triangulate(mesh)
-    RP.addzone2node!(tess, 0+0im, 1+0im, 1+1im, GRPFParams().tolerance)
-    @test (2/3)+(1/3)im in complex.(get_points(tess))
-end
-
-"Different implementation of splittriangles for comparison with `RP.splittriangles!`."
-function alternatesplittriangles(tess, unique_idxs)
-    # Determine which triangles are zone 1 and which are zone 2
-    triangles = Dict{DT.triangle_type(tess),Int}()
-    for w in unique_idxs
-        adj2v = get_adjacent2vertex(tess, w)
-        for (u, v) in adj2v
-            if haskey(triangles, RP.sorttriangle(u, v, w))
-                triangles[RP.sorttriangle(u, v, w)] += 1
-            else
-                triangles[RP.sorttriangle(u, v, w)] = 1
-            end
-        end
-    end
-
-    # Zone 1
-    z1edges = Vector{DT.edge_type(tess)}()
-    for (t, c) in triangles
-        if c > 1
-            u, v, w = indices(t)
-            push!(z1edges, (u, v))
-            push!(z1edges, (v, w))
-            push!(z1edges, (w, u))
-        end
-    end
-    newcoords = Vector{ComplexF64}()
-    a, b = complex.(get_point(tess, first(z1edges)...))
-    push!(newcoords, (a + b)/2)
-    for e in z1edges[2:end]
-        a, b = complex.(get_point(tess, e...))
-        nc = (a + b)/2
-        # elength = sqrt(sum(([reim(b)...]-[reim(a)...]).^2))
-        elength = hypot(b - a)
-        if elength > GRPFParams().tolerance
-            # This makes sure that all the new coordinates are unique
-            dist = hypot.(newcoords .- nc)
-            if all(>(2*eps()), dist)
-                push!(newcoords, nc)
-            end
-        end
-    end
-    # Go back and check the first new node in case it's too short
-    a, b = complex.(get_point(tess, first(z1edges)...))
-    elength = hypot(b - a)
-    if elength < GRPFParams().tolerance
-        popfirst!(newcoords)
-    end
-
-    # Zone 2
-    for (t, c) in triangles
-        if c == 1
-            u, v, w = indices(t)
-            a, b, c = complex.(get_point(tess, u, v, w))
-            el1 = hypot(b - a)
-            el2 = hypot(c - b)
-            el3 = hypot(a - c)
-            if max(el1, el2, el3)/min(el1, el2, el3) > GRPFParams().skinnytriangle
-                nc = (a + b + c)/3
-                push!(newcoords, nc)
-            end
-        end
-    end
-    return newcoords
-end
-
-function test_splittriangles!()
-    simplefcn(z) = (z - 1)*(z - im)^2*(z + 1)^3/(z + im)
-    origcoords = rectangulardomain(complex(-2, -2), complex(2, 2), 0.1)
-
-    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(origcoords))
-    tess = RP.triangulate(mesh)
-    orignumpoints = num_points(tess)
-
-    E = Set{DT.edge_type(tess)}()  # edges
-    selectE = Set{DT.edge_type(tess)}()
-    RP.assignquadrants!(get_points(tess), simplefcn, false)
-    RP.candidateedges!(E, tess)
-    RP.selectedges!(selectE, tess, E, GRPFParams().tolerance)
-    unique_idxs = Set(Iterators.flatten(selectE))
-    newcoords = alternatesplittriangles(tess, unique_idxs)
-
-    RP.splittriangles!(tess, unique_idxs)
-    newnumpoints = num_points(tess)
-    @test newnumpoints - orignumpoints == length(newcoords)
-end
-
-function test_tesselate!()
-    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(Hfcn_mesh()))
-    tess = RP.triangulate(mesh)
-    params = GRPFParams(5, 5000, 3, 1e-9, false)
-    tess, E = RP.tesselate!(tess, Hfcn, params)
-    
-    colors = Makie.wong_colors()[1:4]
-    fig = Figure()
-    ax = Axis(fig[1, 1], xlabel="Re", ylabel="Im")
-    triplot!(ax, tess, triangle_color=colors[RP.getquadrant.(get_points(tess))])
-end
-
-function test_contouredges()
-    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(Hfcn_mesh()))
-    tess = RP.triangulate(mesh)
-    tess, E = RP.tesselate!(tess, Hfcn, GRPFParams(10, 5000, 3, 1e-1, false))
-    C = RP.contouredges(tess, E)
-
-    fig = Figure()
-    ax = Axis(fig[1, 1], xlabel="Re", ylabel="Im")
-    # triplot!(ax, tess, triangle_color=colors[RP.getquadrant.(get_points(tess))])
-
-    colors = Makie.colormap("Greens", 2*length(C))
-    i = 1
-    for c in C
-        x1, y1 = reim(complex(get_point(tess, c[1])))
-        x2, y2 = reim(complex(get_point(tess, c[2])))
-        println(x1," ", y1)
-        println(x2," ", y2)
-        lines!(ax, [x1, x2], [y1, y2], color=[colors[2i-1], colors[2i]])
-        scatter!(ax, [x1, x2], [y1, y2], color=[colors[2i-1], colors[2i]])
-        i += 1
-    end
-    fig
-end
-
-function test_evaluateregions()
-    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(Hfcn_mesh()))
-    tess = RP.triangulate(mesh)
-    tess, E = RP.tesselate!(tess, Hfcn, GRPFParams(30, 5000, 3, 1e-3, false))
-    C = RP.contouredges(tess, E)
-
-    # XXX: evaluateregions currently fails code_warntype
-    regions = RP.evaluateregions!(C, tess)
-
-    fig = Figure()
-    ax = Axis(fig[1, 1], xlabel="Re", ylabel="Im")
-    # triplot!(ax, tess, triangle_color=colors[RP.getquadrant.(get_points(tess))])
-    for r in regions       
-        xys = collect(reim.(complex.(get_point(tess, r...))))
-        lines!(ax, xys)
-        scatter!(ax, xys)
-    end
-    fig
-end
-
-function test_rootsandpoles()
-    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(Hfcn_mesh()))
-    tess = RP.triangulate(mesh)
-    tess, E = RP.tesselate!(tess, Hfcn, GRPFParams(30, 5000, 3, 1e-3, false))
-    C = RP.contouredges(tess, E)
-    regions = RP.evaluateregions!(C, tess)
-
-    r = regions[1]
-    pts = get_point(tess, r...)
-    quadrantsequence = [RP.getquadrant(p) for p in pts]
-
-    # Sign flip because `r` are in opposite order of Matlab?
-    dq = diff(quadrantsequence)
-    for i in eachindex(dq)
-        if dq[i] == 3
-            dq[i] = -1
-        elseif dq[i] == -3
-            dq[i] = 1
-        elseif abs(dq[i]) == 2
-            # ``|ΔQ| = 2`` is ambiguous; cannot tell whether phase increases or
-            # decreases by two quadrants
-            dq[i] = 0
-        end
-    end
-    q = sum(dq)/4
-    z = sum(complex, pts)/length(pts)
-
-    if q > 0
-        push!(zroots, z)  # convert in case T isn't Float64
-    elseif q < 0
-        push!(zpoles, z)
-    end
+    v = [1.332, 1.331, 1.395, 1.320, 1.301]
+    v2 = copy(v)
+    RP.dedupe!(v; digits=RP.toldigits(1e-3))
+    RP.dedupe!(v2; tol=1e-3)
+    @test v == [1.332, 1.395, 1.320, 1.301]
+    @test v == v2
 end
 
 @testset "RootsAndPoles.jl" begin
-    test_GRPFParams()
-    test_assignquadrants!()
-    test_candidateedges!()
-    test_addzone1node!()
-    test_addzone2node!()
+   
+    
 end

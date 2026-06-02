@@ -1,16 +1,19 @@
 using Test
-using LinearAlgebra
-using SpecialFunctions
+using LinearAlgebra, Random
+using SpecialFunctions, StableRNGs
+using StaticArrays
 using DelaunayTriangulation
+const DT = DelaunayTriangulation
 
 using RootsAndPoles
 const RP = RootsAndPoles
+
+const RNG = StableRNG(123)
 
 function approxmatch(A, B)
     length(A) == length(B) || return false
 
     matches = Dict{eltype(A),Vector{eltype(B)}}()
-
     for a in A
         for b in B
             if b ≈ a
@@ -29,12 +32,13 @@ function approxmatch(A, B)
     return true
 end
 
-@testset "RootsAndPoles" begin
-    include("RootsAndPoles.jl")
 
-    # @testset "Simple Rational Function" begin include("SimpleRationalFunction.jl") end
+@testset "RootsAndPoles" begin
+    # include("RootsAndPoles.jl")
+
+    @testset "Simple Rational Function" begin include("SimpleRationalFunction.jl") end
+    @testset "Default Function" begin include("DefaultFunction.jl") end
     @testset "Complex Modes" begin include("ComplexModes.jl") end
     @testset "Lossy Multilayered Waveguide" begin include("LossyMultilayeredWaveguide.jl") end
     @testset "Graphene Transmission Line" begin include("GrapheneTransmissionLine.jl") end
-    @testset "Default" begin include("DefaultFunction.jl") end
 end

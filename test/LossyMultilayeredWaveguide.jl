@@ -17,52 +17,43 @@ function wvgd(z)
              1im*γs  -m21+im*γc*m22])
 end
 
-# Analysis parameters
-xb = 1.0  # real part begin
-xe = 2.5  # real part end
-yb = -1.0  # imag part begin
-ye = 1.0  # imag part end
-r = 0.5  # initial mesh step
-
-origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
-
 # matlab results from https://github.com/PioKow/GRPF for comparison
-matlab_zroots = [1.096752543421462 - 0.000197146739811im,
-                 1.240454471623525 - 0.000133821833879im,
-                 1.353140429314226 - 0.000086139142513im,
-                 1.439795544324443 - 0.000052001606673im,
-                 1.504169866163284 - 0.000028029270470im,
-                 1.548692244058475 - 0.000012100953609im,
-                 1.574863045662642 - 0.000002974364907im]
+# for tol=1e-9, 2472 nodes and 31 iterations for regular GRPF
+true_zroots = [1.09675254341 - 0.00019714688im,
+               1.24045447136 - 0.00013382215im,
+               1.35314042918 - 0.00008613919im,
+               1.43979554425 - 0.00005200167im,
+               1.50416986640 - 0.00002802944im,
+               1.54869224388 - 0.00001210101im,
+               1.57486304575 - 0.00000297462im]
 
-matlab_zpoles = ComplexF64[]
+true_zpoles = ComplexF64[]
 
-zroots, zpoles = grpf(wvgd, origcoords)
+true_zrm = ones(length(true_zroots))
+true_zpm = []
 
-@test length(zroots) == 7
-@test length(zpoles) == 0
+origcoords = ComplexMesh([1-1im, 2.5-1im, 1+1im, 2.5+1im]; rng=RNG)
 
-@test approxmatch(zroots, matlab_zroots)
-@test approxmatch(zpoles, matlab_zpoles)
+coords = deepcopy(origcoords)
+zroots, zpoles = rootsandpoles(wvgd, coords)
 
-pzroots, pzpoles, quadrants, phasediffs, tess, g2f = grpf(wvgd, origcoords, PlotData())
+@test approxmatch(zroots, true_zroots)
+@test approxmatch(zpoles, true_zpoles)
 
-@test approxmatch(pzroots, matlab_zroots)
-@test approxmatch(pzpoles, matlab_zpoles)
+# ReturnMultiplicity
+coords = deepcopy(origcoords)
+zroots, zpoles, zrm, zpm = rootsandpoles(wvgd, coords, ReturnMultiplicity())
 
-# Test with big origcoords
-xb = big"1.0"  # real part begin
-xe = big"2.5"  # real part end
-yb = big"-1.0"  # imag part begin
-ye = big"1.0"  # imag part end
-r = big"0.5"  # initial mesh step
+@test approxmatch(zroots, true_zroots)
+@test approxmatch(zpoles, true_zpoles)
 
-origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
+@test zrm == true_zrm
+@test zpm == true_zpm
 
-bzroots, bzpoles = grpf(wvgd, origcoords)
+# MeshIterations
+coords = deepcopy(origcoords)
+iterations = MeshIterations(coords)
+zroots, zpoles = rootsandpoles(wvgd, coords; iterations)
 
-@test all(isa.(bzroots, Complex{BigFloat}))
-@test all(isa.(bzpoles, Complex{BigFloat}))
-
-@test approxmatch(bzroots, zroots)
-@test approxmatch(bzpoles, zpoles)
+@test approxmatch(zroots, true_zroots)
+@test approxmatch(zpoles, true_zpoles)

@@ -36,47 +36,56 @@ function complexmodes(z)
     DYm_b2 = (bessely0(κ₂*b) - bessely(2, κ₂*b))/2
 
     W = [Jm_a1                 0                       -Jm_a2              -Ym_a2              0                       0;
-       0                     Jm_a1/η₁                0                   0                   -Jm_a2/η₂               -Ym_a2/η₂;
-       γ*m*Jm_a1/(a*κ₁^2)    -ω*μ₁*DJm_a1/(κ₁*η₁)    -γ*m*Jm_a2/(a*κ₂^2) -γ*m*Ym_a2/(a*κ₂^2) ω*μ₂*DJm_a2/(κ₂*η₂)     ω*μ₂*DYm_a2/(κ₂*η₂);
-       -ω*ϵ₁*DJm_a1/κ₁       -m*γ*Jm_a1/(a*κ₁^2*η₁)  ω*ϵ₂*DJm_a2/κ₂      ω*ϵ₂*DYm_a2/κ₂      m*γ*Jm_a2/(a*κ₂^2*η₂)   m*γ*Ym_a2/(a*κ₂^2*η₂);
-       0                     0                       Jm_b2               Ym_b2               0                       0;
-       0                     0                       γ*m*Jm_b2/(b*κ₂^2)  γ*m*Ym_b2/(b*κ₂^2)  -ω*μ₂*DJm_b2/(κ₂*η₂)    -ω*μ₂*DYm_b2/(κ₂*η₂)]
+         0                     Jm_a1/η₁                0                   0                   -Jm_a2/η₂               -Ym_a2/η₂;
+         γ*m*Jm_a1/(a*κ₁^2)    -ω*μ₁*DJm_a1/(κ₁*η₁)    -γ*m*Jm_a2/(a*κ₂^2) -γ*m*Ym_a2/(a*κ₂^2) ω*μ₂*DJm_a2/(κ₂*η₂)     ω*μ₂*DYm_a2/(κ₂*η₂);
+        -ω*ϵ₁*DJm_a1/κ₁       -m*γ*Jm_a1/(a*κ₁^2*η₁)   ω*ϵ₂*DJm_a2/κ₂      ω*ϵ₂*DYm_a2/κ₂      m*γ*Jm_a2/(a*κ₂^2*η₂)   m*γ*Ym_a2/(a*κ₂^2*η₂);
+         0                     0                       Jm_b2               Ym_b2               0                       0;
+         0                     0                       γ*m*Jm_b2/(b*κ₂^2)  γ*m*Ym_b2/(b*κ₂^2)  -ω*μ₂*DJm_b2/(κ₂*η₂)    -ω*μ₂*DYm_b2/(κ₂*η₂)]
     w = det(W)
 end
 
+# results from https://github.com/PioKow/GRPF for comparison
+# for tol=1e-9, 3867 nodes and 30 iterations of regular GRPF
+true_zroots = [-0.09664230246 - 0.06292339746im,
+               -0.09664230246 + 0.06292339746im,
+                0.09664230246 - 0.06292339746im,
+                0.09664230246 + 0.06292339746im,
+               -0.44442904311 + 0.0im,
+                0.44442904311 - 0.0im,
+               -0.70377225022 + 0.0im,
+                0.70377225022 - 0.0im,
+               -0.77502152220 + 0.0im,
+                0.77502152220 - 0.0im,
+               -0.85611520391 + 0.0im,
+                0.85611520391 - 0.0im]
+
+true_zpoles = [0.0 - 0.1im,
+               0.0 + 0.1im]
+
+matlab_zrm = ones(length(true_zroots))
+matlab_zpm = [-2, -2]
+
+
+
+origcoords = ComplexMesh([-1-1im, 1-1im, 1+1im, -1+1im]; rng=RNG)
+
+coords = deepcopy(origcoords)
+zroots, zpoles = rootsandpoles(complexmodes, coords)
+
+@test approxmatch(zroots, true_zroots)
+@test approxmatch(zpoles, true_zpoles)
+
+coords = deepcopy(origcoords)
+iterations = MeshIterations(coords)
+zroots, zpoles = rootsandpoles(complexmodes, coords; iterations, params=FinderParams(maxadaptivenodes=3000))
+
+@test approxmatch(zroots, true_zroots)
+@test approxmatch(zpoles, true_zpoles)
+
 R = 1.0
 r = 0.15
+densecoords = ComplexMesh(RP.diskdomain(R, r); rng=RNG)
+zroots, zpoles = rootsandpoles(complexmodes, densecoords; params=FinderParams(maxadaptivenodes=1000))
 
-origcoords = diskdomain(R, r)
-
-# matlab results from https://github.com/PioKow/GRPF for comparison
-matlab_zroots = [-0.856115203791905 + 0.000000000114004im,
-                 -0.775021521974263 + 0.000000000017321im,
-                 -0.703772250164549 - 0.000000000209979im,
-                 -0.444429043571261 - 0.000000000174298im,
-                 -0.096642302493522 - 0.062923397621120im,
-                 -0.096642302349294 + 0.062923397246964im,
-                  0.096642302349294 - 0.062923397246964im,
-                  0.096642302363736 + 0.062923397315544im,
-                  0.444429043571261 + 0.000000000174298im,
-                  0.703772250003777 - 0.000000000078642im,
-                  0.775021521891359 - 0.000000000075087im,
-                  0.856115203873180 - 0.000000000219841im]
-
-matlab_zpoles = [0.000000000022863 - 0.100000000307523im,
-                 0.000000000069120 + 0.100000000307523im]
-
-zroots, zpoles = grpf(complexmodes, origcoords)
-
-@test length(zroots) == 12
-@test length(zpoles) == 2
-
-@test approxmatch(zroots, matlab_zroots)
-@test approxmatch(zpoles, matlab_zpoles)
-
-pzroots, pzpoles, quadrants, phasediffs, tess, g2f = grpf(complexmodes, origcoords, PlotData())
-
-@test approxmatch(pzroots, matlab_zroots)
-@test approxmatch(pzpoles, matlab_zpoles)
-
-# Can't test with big values because of special functions (bessel)
+@test approxmatch(zroots, true_zroots)
+@test approxmatch(zpoles, true_zpoles)
