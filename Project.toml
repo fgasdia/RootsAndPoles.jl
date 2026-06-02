@@ -1,7 +1,7 @@
 name = "RootsAndPoles"
 uuid = "a0859a10-ccb4-11e8-145d-674b3750773a"
 authors = ["Forrest Gasdia <EP-Guy@users.noreply.github.com>"]
-version = "2.0.0"
+version = "3.0.0"
 
 [deps]
 ChunkSplitters = "ae650224-84b6-46f8-82ea-d812ca08434e"
@@ -14,15 +14,20 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 [compat]
 ChunkSplitters = "3.1.2"
 DelaunayTriangulation = "1"
-LinearAlgebra = "1"
+EnumX = "1"
 StaticArrays = "1.9.14"
+LinearAlgebra = "1"
+Random = "1"
 julia = "1.10"
 
 [extras]
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+DelaunayTriangulation = "927a84f5-c5f4-47a5-9785-b46e178433df"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
+StableRNGs = "860ef19b-820b-49d6-a774-d7a799459cd3"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-benchmark = ["BenchmarkTools", "LinearAlgebra"]
-test = ["SpecialFunctions", "Test"]
+test = ["DelaunayTriangulation", "LinearAlgebra", "Random", "SpecialFunctions", "StableRNGs", "StaticArrays", "Test"]
