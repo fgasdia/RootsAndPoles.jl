@@ -3,7 +3,7 @@ os:
   - linux
   - osx
 julia:
-  - 1.7
+  - 1.10
   - nightly
 matrix:
   allow_failures:

@@ -2,18 +2,18 @@
 
 [![Build Status](https://travis-ci.com/fgasdia/RootsAndPoles.jl.svg?branch=master)](https://travis-ci.com/fgasdia/RootsAndPoles.jl) [![Build status](https://ci.appveyor.com/api/projects/status/megpgn8l1ej5m3ww?svg=true)](https://ci.appveyor.com/project/fgasdia/rootsandpoles-jl) [![DOI](https://zenodo.org/badge/154031378.svg)](https://zenodo.org/badge/latestdoi/154031378)
 
-A Julia implementation of [GRPF](https://github.com/PioKow/GRPF) by Piotr Kowalczyk.
+A Julia implementation of [GRPF](https://github.com/PioKow/GRPF) by Piotr Kowalczyk and [SA-GRPF](https://github.com/PioKow/SAGRPF) by Sebastian Dziedziewicz, Malgorzata Warecka, Rafal Lech, and Piotr Kowalczyk.
 
 ## Description
 
 `RootsAndPoles.jl` attempts to **find all the zeros and poles of a complex valued function with complex arguments in a fixed region**.
 These types of problems are frequently encountered in electromagnetics, but the algorithm can also be used for similar problems in e.g. optics, acoustics, etc.
 
-The GRPF algorithm first samples the function on a triangular mesh through Delaunay triangulation.
-Candidate regions to search for roots and poles are determined and the discretized [Cauchy's argument principle](https://en.wikipedia.org/wiki/Argument_principle) is applied _without needing the derivative of the function or integration over the contour_.
-To improve the accuracy of the results, a self-adaptive mesh refinement occurs inside the identified candidate regions.
+The SA-GRPF algorithm first generates a self-adaptive mesh on the complex plane through Delaunay triangulation.
+Candidate regions to search for roots and poles are determined and the discretized [Cauchy's argument principle](https://en.wikipedia.org/wiki/Argument_principle) is applied without needing the derivative of the function or integration over the contour.
+To improve the accuracy of the results, mesh refinement occurs inside the identified candidate regions.
 
-![simplefcn](simplefcn.svg)
+![simplefcn](simplefcn_sagrpf.svg)
 
 ## Usage
 
@@ -33,93 +33,70 @@ end
 ```
 
 Next, we define parameters for the initial complex domain over which we would like to search.
+Although any starting mesh can be provided, SA-GRPF will automatically refine the mesh from just 4 corner points.
+`coords` below is a `ComplexMesh` object containing a vector of complex numbers representing each point of the Delaunay triangulation. The vector is modified in place.
+
 ```julia
-xb = -2  # real part begin
-xe = 2  # real part end
-yb = -2  # imag part begin
-ye = 2  # imag part end
-r = 0.1  # initial mesh step
-tolerance = 1e-9
+using Random, RootsAndPoles
+
+RNG = Random.default_rng()
+coords = ComplexMesh([-2-2im, 2-2im, -2+2im, 2+2im]; rng=RNG)
 ```
 
-This package includes convenience functions for rectangular and disk shaped domains, but any "shape" can be used.
-`origcoords` below is simply a vector of complex numbers containing the original mesh coordinates which will be Delaunay triangulated.
-For maximum efficiency, the original mesh nodes should form equilateral triangles.
-```julia
-using RootsAndPoles
-
-origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
-```
-
-Roots and poles can be obtained with the `grpf` function.
+Roots and poles can be obtained with the `rootsandpoles` function.
 We only need to pass the handle to our `simplefcn` and the `origcoords`.
 ```julia
-zroots, zpoles = grpf(simplefcn, origcoords)
+zroots, zpoles = rootsandpoles(simplefcn, coords)
 ```
 
 ### Additional parameters
 
-Additional parameters can be provided to the tessellation and GRPF algorithms by explicitly passing a `GRPFParams` struct.
+Additional parameters can be provided to the triangulation and SA-GRPF algorithms by explicitly passing a `FinderParams` struct.
 
-The two most useful parameters are `tess_sizehint` for the final total number of nodes in the internal `DelaunayTessellation2D` object and the root finder `tolerance` at which the mesh refinement stops.
-Just like `sizehint!` for other collections, setting `tess_sizehint` to a value approximately equal to the final number of nodes in the tessellation can improve performance.
-`tolerance` is the largest triangle edge length of the candidate edges defined in the `origcoords` domain.
-In practice, the root and pole accuracy is a larger value than `tolerance`, so `tolerance` needs to be set smaller than the desired tolerance on the roots and poles.
+The `tol` parameter determines the tolerance (maximum edge length amongst edges to split) at which the mesh refinement stops.
+`maxadaptivenodes` specifies the maximum number of nodes in the Delaunay triangulation before the algorithm switches from the adaptive refinement mode to the regular GRPF mode.
+If the tolerance is not met, mesh refinement will stop when either `maxiters` iterations or `maxnodes` is reached. 
 
-By default, the value of `tess_sizehint` is 5000 and the `tolerance` is 1e-9, but they can be specified by providing the `GRPFParams` argument
+In practice, the root and pole accuracy is a larger value than `tol`, so `tol` needs to be set smaller than the desired tolerance on the roots and poles.
+By default, the vectors of identified roots and poles are "deduplicated" in case two values within ≈ `tol` are returned for the same root or pole.
+The deduplication checks for uniqueness up to one less digit after the decimal (rounded) than the order of `tol`.
+For example, if `tol = 1e-9`, all entries of `zroots` and `zpoles` must be unique to the 8th digit after the decimal place.
+
+
 ```julia
-zroots, zpoles = grpf(simplefcn, origcoords, GRPFParams(5000, 1e-9))
+params = FinderParams(tol=1e-6, maxadaptivenodes=500)
+zroots, zpoles = rootsandpoles(simplefcn, coords; params)
 ```
 
-Beginning version `v1.1.0`, calls to the provided function, e.g. `simplefcn`, can be **multithreaded** using Julia's `@threads` capability.
+Evaluation of the user-provided function, e.g. `simplefcn`, can be parallelized by spawning `numtasks` tasks.
 The function is called at every node of the triangulation and the results should be independent of one another.
-For fast-running functions like `simplefcn`, the overall runtime of `grpf` is dominated by the Delaunay Triangulation itself, but for more complicated functions, threading can provide a significant advantage.
-To enable multithreading of the function calls, specify so as a `GRPFParams` argument
+For fast-running functions like `simplefcn`, the overall runtime of `rootsandpoles` is dominated by the Delaunay triangulation itself, but for more complicated functions multithreading can provide a significant advantage.
+To enable multithreading of the function calls, specify so as a `FinderParams` argument
 ```julia
-zroots, zpoles = grpf(simplefcn, origcoords, GRPFParams(5000, 1e-9, true))
+zroots, zpoles = rootsandpoles(simplefcn, coords, FinderParams(numtasks=4))
 ```
-By default, `multithreading = false`.
+By default, `numtasks = 1`.
 
-Additional parameters which can be controlled are `maxiterations`, `maxnodes`, and `skinnytriangle`. `maxiterations` sets the maximum number of mesh refinement iterations and `maxnodes` sets the maximum number of nodes allowed in the `DelaunayTessellation2D` before returning.
-`skinnytriangle` is the maximum allowed ratio of the longest to shortest side length in a tessellation triangle before the triangle is automatically subdivided in the mesh refinement step.
-Default values are
+### Saving refinement iterations
 
-  - `maxiterations`: 100
-  - `maxnodes`: 500000
-  - `skinnytriangle`: 3
+To save the output of each mesh refinement iteration, pass a `MeshIterations` object to `rootsandpoles`.
 
-These can be specified along with the `tess_sizehint`, `tolerance` and `multithreading` as, e.g.
 ```julia
-zroots, zpoles = grpf(simplefcn, origcoords, GRPFParams(100, 500000, 3, 5000, 1e-9, true))
+coords = ComplexMesh([-2-2im, 2-2im, -2+2im, 2+2im]; rng=RNG)
+iterations = MeshIterations(coords)
+zroots, zpoles = rootsandpoles(simplefcn, coords; iterations)
 ```
 
-### Plot data
+## Plotting
 
-If mesh node `quadrants` and `phasediffs` are wanted for plotting, simply pass a `PlotData()` instance.
-```julia
-zroots, zpoles, quadrants, phasediffs, tess, g2f = grpf(simplefcn, origcoords, PlotData())
-```
-
-A `GRPFParams` can also be passed.
-```julia
-zroots, zpoles, quadrants, phasediffs, tess, g2f = grpf(simplefcn, origcoords, PlotData(), GRPFParams(5000, 1e-9))
-```
-
-In `v1.4.0`, a function `getplotdata` makes plotting the tessellation results more convenient.
-The code below was used to create the figure shown at the top of the page.
+Although plotting is not built into this package, plots of the mesh iterations or final mesh are readily made from the `ComplexMesh` object.
+Example functions for plotting using [Makie.jl](https://docs.makie.org/stable/) are provided in the `plotting.jl` file in the base of this GitHub repo.
 
 ```julia
-zroots, zpoles, quadrants, phasediffs, tess, g2f = grpf(simplefcn, origcoords, PlotData());
-z, edgecolors = getplotdata(tess, quadrants, phasediffs, g2f);
-
-using Plots
-
-pal = ["yellow", "purple", "green", "orange", "black", "cyan"]
-plot(real(z), imag(z), group=edgecolors, palette=pal,
-     xlabel="Re(z)", ylabel="Im(z)",
-     xlims=(-2, 2), ylims=(-2, 2),
-     legend=:outerright, legendtitle="f(z)", title="Simple rational function",
-     label=["Re > 0, Im ≥ 0" "Re ≤ 0, Im > 0" "Re < 0, Im ≤ 0" "Re ≥ 0, Im < 0" "" ""])
+coords = ComplexMesh([-2-2im, 2-2im, -2+2im, 2+2im]; rng=RNG)
+zroots, zpoles = rootsandpoles(simplefcn, coords)
+fig, ax = plotquadrants(coords; title="Simple rational function f")
+save("simplefcn_sagrpf.svg", fig)
 ```
 
 ### Additional examples
@@ -128,9 +105,8 @@ See [test/](test/) for additional examples.
 
 ## Limitations
 
-This package uses [VoronoiDelaunay.jl](https://github.com/JuliaGeometry/VoronoiDelaunay.jl) to perform the Delaunay tessellation.
-`VoronoiDelaunay` is numerically limited to the range of `1.0+eps(Float64)` to `2.0-2eps(Float64)` for its point coordinates.
-`RootsAndPoles.jl` will accept functions and `origcoords` that aren't limited to `Complex{Float64}`, for example `Complex{BigFloat}`, but the internal tolerance of the root finding is limited to `Float64` precision.
+This package uses [DelaunayTriangulation.jl](https://github.com/JuliaGeometry/DelaunayTriangulation.jl) to perform the Delaunay tessellation.
+`DelaunayTriangulation` is numerically limited to `Float64` precision.
 
 ## Citing
 
@@ -139,6 +115,8 @@ Please consider citing Piotr's publications if this code is used in scientific w
   1. P. Kowalczyk, “Complex Root Finding Algorithm Based on Delaunay Triangulation”, ACM Transactions on Mathematical Software, vol. 41, no. 3, art. 19, pp. 1-13, June 2015. https://dl.acm.org/citation.cfm?id=2699457
 
   2. P. Kowalczyk, "Global Complex Roots and Poles Finding Algorithm Based on Phase Analysis for Propagation and Radiation Problems," IEEE Transactions on Antennas and Propagation, vol. 66, no. 12, pp. 7198-7205, Dec. 2018. https://ieeexplore.ieee.org/document/8457320
+
+  3. S. Dziedziewicz, M. Warecka, R. Lech, and P. Kowalczyk, “Self-Adaptive Mesh Generator for Global Complex Roots and Poles Finding Algorithm,” IEEE Trans. Microwave Theory Techn., vol. 71, no. 7, pp. 2854–2863, Jul. 2023, doi: [10.1109/TMTT.2023.3238014](https://doi.org/10.1109/TMTT.2023.3238014).
 
 We also encourage you to cite this package if used in scientific work.
 Refer to the Zenodo DOI at the top of the page or [CITATION.bib](CITATION.bib).

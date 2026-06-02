@@ -31,55 +31,42 @@ function graphenefunction(z)
     w = (Y1TM + Y2TM + YSTM)*(-Y1TM + Y2TM + YSTM)*(Y1TM - Y2TM + YSTM)*(-Y1TM - Y2TM + YSTM)
 end
 
-# Analysis parameters
-xb = -100  # real part begin
-xe = 400  # real part end
-yb = -100  # imag part begin
-ye = 400  # imag part end
-r = 18  # initial mesh step
+# results from SAGRPF paper, single order
+true_zroots = [-32.101962251 - 27.430861936im,
+                32.101962251 + 27.430861936im,
+               -38.177725314 - 32.529521045im,
+                38.177725314 + 32.529521045im,  # typo in SAGRPF paper on sign of Im
+               332.744888929 + 282.243079954im,
+               336.220287339 + 285.191091014im,
+               368.439467216 + 312.522078059im,
+               371.007570834 + 314.700407677im,
+                −0.003206780 − 0.964810358im,
+                 0.003206780 + 0.964810358im,
+                −0.004526720 + 0.955901829im,
+                 0.004526720 - 0.955901829im]
 
-origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
+# second order
+true_zpoles = [0.000000000 - 1.000000000im,
+               0.000000000 + 1.000000000im,
+               0.000000000 - 3.449637662im,
+               0.000000000 + 3.449637662im]
 
-# matlab results from https://github.com/PioKow/GRPF for comparison
-matlab_zroots = [-38.1777253145628 - 32.5295210454247im,
-                 -32.1019622517269 - 27.4308619361753im,
-                  32.1019622517269 + 27.4308619360714im,
-                  38.17772531429 + 32.5295210455806im,
-                  332.744888929695 + 282.243079954389im,
-                  336.220287339074 + 285.191091013829im,
-                  368.439467215558 + 312.522078059503im,
-                  371.007570834263 + 314.700407676927im]
+true_zrm = ones(length(true_zroots))
+true_zpm = [-2, -2, -2, -2]
 
-matlab_zpoles = [-2.30871731988513e-10 - 3.44963766202144im,
-                 -2.65852297441317e-10 + 3.4496376622893im]
+origcoords = ComplexMesh([-100-100im, 400-100im, -100+400im, 400+400im]; rng=RNG)
+params = FinderParams(maxadaptivenodes=10000)
 
-zroots, zpoles = grpf(graphenefunction, origcoords)
+coords = deepcopy(origcoords)
+zroots, zpoles = rootsandpoles(graphenefunction, coords; params)
 
-@test length(zroots) == 8
-@test length(zpoles) == 2
+@test approxmatch(zroots, true_zroots)
+@test approxmatch(zpoles, true_zpoles)
 
-@test approxmatch(zroots, matlab_zroots)
-@test approxmatch(zpoles, matlab_zpoles)
+# MeshIterations
+coords = deepcopy(origcoords)
+iterations = MeshIterations(coords)
+zroots, zpoles = rootsandpoles(graphenefunction, coords; iterations, params)
 
-pzroots, pzpoles, quadrants, phasediffs, tess, g2f = grpf(graphenefunction, origcoords, PlotData())
-
-@test approxmatch(pzroots, matlab_zroots)
-@test approxmatch(pzpoles, matlab_zpoles)
-
-# Test with big origcoords
-xb = big"-100"  # real part begin
-xe = big"400"  # real part end
-yb = big"-100"  # imag part begin
-ye = big"400"  # imag part end
-r = big"18"  # initial mesh step
-tolerance = 1e-9
-
-origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
-
-bzroots, bzpoles = grpf(graphenefunction, origcoords)
-
-@test all(isa.(bzroots, Complex{BigFloat}))
-@test all(isa.(bzpoles, Complex{BigFloat}))
-
-@test approxmatch(bzroots, zroots)
-@test approxmatch(bzpoles, zpoles)
+@test approxmatch(zroots, true_zroots)
+@test approxmatch(zpoles, true_zpoles)

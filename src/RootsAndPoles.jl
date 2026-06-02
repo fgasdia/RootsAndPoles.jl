@@ -1,10 +1,8 @@
-__precompile__(true)
-
 """
     RootsAndPoles.jl
 
 `RootsAndPoles` is a Julia implementation of the Global complex Roots and Poles Finding
-(GRPF) algorithm.
+(GRPF) algorithm and the Self-Adaptive Mesh Generator.
 
 Matlab code is available under MIT license at https://github.com/PioKow/GRPF.
 
@@ -13,137 +11,109 @@ Matlab code is available under MIT license at https://github.com/PioKow/GRPF.
 [^1]: P. Kowalczyk, “Global complex roots and poles finding algorithm based on phase
     analysis for propagation and radiation problems,” IEEE Transactions on Antennas and
     Propagation, vol. 66, no. 12, pp. 7198–7205, Dec. 2018, doi: 10.1109/TAP.2018.2869213.
+[^2]: S. Dziedziewicz, M. Warecka, R. Lech, and P. Kowalczyk, “Self-Adaptive Mesh Generator
+    for Global Complex Roots and Poles Finding Algorithm,” IEEE Trans. Microwave Theory
+    Techn., vol. 71, no. 7, pp. 2854–2863, July 2023, doi: 10.1109/TMTT.2023.3238014.
 """
 module RootsAndPoles
 
-#==
-NOTE: Some variable conversions from the original GRPF papers to this code:
+using Base.Threads
+using LinearAlgebra, Random
+using StaticArrays, ChunkSplitters
+using EnumX
+using DelaunayTriangulation
+const DT = DelaunayTriangulation
 
-| Paper | Code |
-|-------|------|
-|   𝓔   |   E  |
-|   𝐶   |   C  |
-|   ϕ   |  phi |
-==#
-
-import Base
-import Base.Threads.@threads
-using LinearAlgebra
-using VoronoiDelaunay
-import VoronoiDelaunay: getx, gety, DelaunayEdge, DelaunayTriangle
-
-# NOTE: `max_coord` and `min_coord` are provided by `VoronoiDelaunay.jl`
-# We are even more conservative than going from `max_coord` to `min_coords` because it is
-# possible to run into floating point issues at the very limits
-const MAXCOORD = nextfloat(max_coord, -10)
-const MINCOORD = nextfloat(min_coord, 10)
+const TRIANGLETYPE = NTuple{3,Int}
+const EDGETYPE = NTuple{2,Int}
 
 """
-    GRPFParams
-
-Struct for holding values used by `RootsAndPoles` to stop iterating or split
-Delaunay triangles.
-
-Default values are provided by `GRPFParams()`.
+    FinderParams
 
 # Fields
 
-- `maxiterations::Int = 100`: the maximum number of refinement iterations before `grpf`
-    returns.
-- `maxnodes::Int = 500000`: the maximum number of Delaunay tessalation nodes before `grpf`
-    returns.
-- `skinnytriangle::Int = 3`: maximum ratio of the longest to shortest side length of
-    Delaunay triangles before they are split during `grpf` refinement iterations.
-- `tess_sizehint::Int = 5000`: provide a size hint to the total number of expected nodes in
-    the Delaunay tesselation. Setting this number approximately correct can improve
-    performance.
-- `tolerance::Float64 = 1e-9`: maximum allowed edge length of the tesselation defined in the
-    `origcoords` domain before returning.
-- `multithreading::Bool = false`: use `Threads.@threads` to run the user-provided function
-    `fcn` across the `DelaunayTriangulation`.
+- `tol::Float64 = 1e-9`: maximum edge length of the triangulation before returning.
+- `maxiters::Int = 1000`: maximum number of refinement iterations before returning.
+- `maxadaptivenodes::Int = 2000`: maximum number of nodes in the triangulation
+    built from the adaptive mesh algorithm of SA-GPRF before switching to regular GRPF
+    refinement.
+- `maxnodes::Int = 20000`: maximum number of nodes in the triangulation before returning.
+- `numtasks::Int = 1`: spawn `numtasks` tasks to evaluate the user-provided function
+    across the triangulation.
 """
-struct GRPFParams
-    maxiterations::Int
-    maxnodes::Int
-    skinnytriangle::Int
-    tess_sizehint::Int
-    tolerance::Float64
-    multithreading::Bool
-
-    function GRPFParams(maxiterations, maxnodes, skinnytriangle, tess_sizehint, tolerance,
-                        multithreading)
-        tess_sizehint > maxnodes && @warn "GRPFParams `tess_sizehint` is greater than `maxnodes`"
-        new(maxiterations, maxnodes, skinnytriangle, tess_sizehint, tolerance, multithreading)
-    end
+@kwdef struct FinderParams
+    tol::Float64 = 1e-9
+    maxiters::Int = 1000
+    maxadaptivenodes::Int = 2000
+    maxnodes::Int = 20000
+    numtasks::Int = 1
 end
-GRPFParams() = GRPFParams(100, 500000, 3, 5000, 1e-9, false)
 
-"""
-    GRPFParams(tess_sizehint, tolerance, multithreading=false)
+struct ReturnMultiplicity end
 
-Convenience function for creating a `GRPFParams` object with the most important parameters,
-`tess_sizehint`, `tolerance`, and `multithreading`.
-"""
-GRPFParams(tess_sizehint, tolerance, multithreading=false) =
-    GRPFParams(100, 500000, 3, tess_sizehint, tolerance, multithreading)
+abstract type SkinnyMode end
 
-function Base.isequal(a::GRPFParams, b::GRPFParams)
-    for n in fieldnames(GRPFParams)
-        isequal(getfield(a,n), getfield(b,n)) || return false
-    end
-    return true
+"A triangle is skinny if the ratio of its longest to shortest side is greater than `threshold`."
+@kwdef struct MaxMinRatio <: SkinnyMode
+    threshold::Float64 = 3
 end
-Base.:(==)(a::GRPFParams, b::GRPFParams) = isequal(a,b)
 
-struct PlotData end
-
-"""
-    Geometry2Function{T}
-
-Store conversion coefficients from the `VoronoiDelaunay` domain to the `origcoords`
-function domain.
-
-`Geometry2Function` instances can be called as a function, e.g.
-`z_functiondomain = g2f(z_voronoidelaunay)`.
-
-`Geometry2Function` structs are created internally to `RootsAndPoles` with the
-appropriate scaling parameters but are returned when `grpf` is called with the `PlotData()`
-argument.
-"""
-struct Geometry2Function{T}
-    rmin::T
-    rmax::T
-    imin::T
-    imax::T
+"A triangle is skinny if the ratio of its longest side (its \"base\") to its height is greater then `threshold`."
+@kwdef struct BaseHeightRatio <: SkinnyMode
+    threshold::Float64 = 10
 end
-(f::Geometry2Function)(z) = geom2fcn(z, f.rmin, f.rmax, f.imin, f.imax)
-(f::Geometry2Function)(x, y) = geom2fcn(x, y, f.rmin, f.rmax, f.imin, f.imax)
-Base.eltype(f::Geometry2Function{T}) where T = T
 
-"""
-    ScaledFunction{F,G<:Geometry2Function}
-
-Store conversion coefficients from the `VoronoiDelaunay` domain to the `origcoords` domain
-so that a `ScaledFunction` can be called in place of the original function when providing an
-argument in the `VoronoiDelaunay` domain.
-"""
-struct ScaledFunction{F,G<:Geometry2Function}
-    fcn::F
-    g2f::G
-end
-(f::ScaledFunction)(z) = f.fcn(f.g2f(z))
-
-# These files need the above structs defined
-include("VoronoiDelaunayExtensions.jl")
+include("ComplexMesh.jl")
 include("utils.jl")
 include("coordinate_domains.jl")
 
-export rectangulardomain, diskdomain, grpf, PlotData, getplotdata, GRPFParams
+@enumx SpecialEdge::Int8 begin
+    Candidate = 1
+    Extreme
+    Skinny
+    Gradient
+    Normal = 0
+end
+getcandidateedges(E::Dict) = (e.first for e in E if e.second == SpecialEdge.Candidate)
+
+struct MeshIterations{M<:ComplexMesh}
+    mesh::Vector{M}
+    splitedges::Vector{Dict{EDGETYPE,SpecialEdge.T}}  # reason for splitting
+    refinement_mode::Vector{Symbol}
+end
+MeshIterations(m::M) where {M} =
+    MeshIterations{M}(M[], Vector{Dict{EDGETYPE,SpecialEdge.T}}(), Vector{Symbol}())
+push_mesh!(mi::MeshIterations, m) = push!(mi.mesh, m)
+push_edges!(mi::MeshIterations, e) = push!(mi.splitedges, e)
+push_mode!(mi::MeshIterations, m) = push!(mi.refinement_mode, m)
+
+function Base.show(io::IO, ::MIME"text/plain", m::MeshIterations)
+    println(io, "$(length(m.mesh))-element - MeshIterations")
+    print(io, "refinement_mode: ", m.refinement_mode)
+end
+
+struct PreviousIteration
+    gradients::Dict{TRIANGLETYPE,SVector{2,Float64}}
+    splitedges::Set{TRIANGLETYPE}  # includes added midpoints
+    triangles::Set{TRIANGLETYPE}
+end
+
+struct GradientAnalysis
+    gradients::Dict{TRIANGLETYPE,SVector{2,Float64}}
+    indicators::Vector{Float64}
+    remainingedgelengths::Vector{Float64}
+end
+Base.empty!(ga::GradientAnalysis) = foreach(f->empty!(getfield(ga, f)), fieldnames(GradientAnalysis))
+
+export FinderParams, MaxMinRatio, BaseHeightRatio
+export ComplexMesh, MeshIterations, ReturnMultiplicity, SpecialEdge
+export rootsandpoles
+
 
 """
-    quadrant(val)
+    quadrant(z)
 
-Convert complex function value `val` to quadrant number.
+Return quadrant on the complex plane of complex number `z`.
 
 | Quadrant |       Phase       |
 |:--------:|:-----------------:|
@@ -151,594 +121,727 @@ Convert complex function value `val` to quadrant number.
 |    2     | π/2 ≤ arg f < π   |
 |    3     | π ≤ arg f < 3π/2  |
 |    4     | 3π/2 ≤ arg f < 2π |
+
+Return quadrant 2 if `isnan(z)`.
 """
-@inline function quadrant(val)
-    # This function correponds to `vinq.m`
-    rv, iv = reim(val)
-    if rv > 0 && iv >= 0
+function quadrant(z)
+    r, i = reim(z)
+    if r > 0 && i >= 0
         return 1
-    elseif rv <= 0 && iv > 0
+    elseif r <= 0 && i >= 0
         return 2
-    elseif rv < 0 && iv <= 0
+    elseif r < 0 && i < 0
         return 3
-    else
-        # (rv >= 0) & (iv < 0)
+    elseif r >= 0 && i < 0
         return 4
+    elseif isnan(z)
+        return 2  # z is possibly a pole
+    else
+        error("quadrant could not be evaluated for $z")
     end
 end
 
 """
-    assignquadrants!(quadrants, nodes, f, multithreading=false)
+    evalfcn!(f, mesh, startindex; numtasks=Threads.nthreads())
 
-Evaluate function `f` for [`quadrant`](@ref) at `nodes` and fill `quadrants` in-place.
+Evaluate function `f` from `startindex` to the last node of `mesh`, updating `mesh.fvals` in place.
 
-Each element of `quadrants` corresponds to the `index` of `IndexablePoint2D` in `nodes`.
+Function evaluation is multithreaded into number `numtasks` of tasks.
 """
-function assignquadrants!(quadrants, nodes, f::ScaledFunction{F,G}, multithreading=false) where {F,G}
-    if multithreading
-        @threads for p in nodes
-            quadrants[getindex(p)] = quadrant(f(p))
+function evalfcn!(f, mesh, startindex; numtasks=Threads.nthreads())
+    indices = startindex:lastindex(mesh)
+    if numtasks == 1
+        for i in indices
+            z = complex(coord(mesh, i)...)
+            v = f(z)
+            fval!(mesh, i, v)
         end
     else
-        for p in nodes
-            quadrants[getindex(p)] = quadrant(f(p))
+        @sync for inds in chunks(indices; n=numtasks, split=RoundRobin())
+            @spawn for i in inds
+                z = complex(coord(mesh, i)...)
+                v = f(z)
+                fval!(mesh, i, v)
+            end
         end
+    end
+end
+
+
+"""
+    findcandidateedges(mesh)
+
+Return a `Set` of edges within `mesh` for which the change in [`quadrant`](@ref) between
+nodes is 2.
+
+Roots or poles are located where the regions described by four different quadrants meet.
+Since any triangulation of the four nodes located in the four different quadrants requires
+at least one edge of ``|ΔQ| = 2``, then all such edges are candidates for locating a
+root or pole.
+"""
+findcandidateedges(mesh) = Set(minmax(e...) for e in each_solid_edge(mesh) if iscandidateedge(e, mesh))
+
+function findcandidateedges!(edgestosplit::Dict, mesh)
+    for e in each_solid_edge(mesh)
+        if iscandidateedge(e, mesh)
+            edgestosplit[minmax(e...)] = SpecialEdge.Candidate
+        end 
+    end
+end
+
+function iscandidateedge(edge, mesh)
+    A, B = edge_vertices(edge)
+    qA, qB = quadrant(mesh, A, B)
+    ΔQ = abs(qA - qB)
+    return ΔQ == 2
+end
+
+"""
+    findextremeedges(splitedges, mesh)
+
+Return edges for further refinement if the phase of nodes added in the last iteration is
+is outside the range of the phases of the original edge nodes.
+
+For node ``m`` added between nodes ``a`` and ``b``, if ``min{ϕₐ,ϕᵦ} ≤ ϕₘ ≤ min{ϕₐ,ϕᵦ}`` is
+not true, then every edge between ``m`` and its neighboring nodes should be split.
+
+# References
+
+See Figure 5 of Dziedziewicz, et al., “Self-Adaptive Mesh Generator for Global Complex Roots
+and Poles Finding Algorithm,” doi: 10.1109/TMTT.2023.3238014.
+"""
+function findextremeedges!(edgestosplit::Dict, splitedges, mesh)
+    for e in splitedges
+        A, B, M = e
+        @assert M > A && M > B "node index M is not greater than A and B"
+        if unorderedphase(mesh, A, B, M)  # shouldsplit
+            for V in get_neighbours(mesh, M)
+                DT.is_ghost_vertex(V) || get!(edgestosplit, minmax(M, V), SpecialEdge.Extreme)
+            end
+        end
+    end
+end
+
+function unorderedphase(mesh, A, B, M)
+    fA, fB, fM = fval(mesh, A, B, M)
+    qA, qB, qM = quadrant(fA), quadrant(fB), quadrant(fM)
+    pA, pB, pM = angle(fA), angle(fB), angle(fM)
+
+    # `angle` returns a number -π ≤ angle(z) ≤ π, therefore Q3 and Q4 have ϕ < 0
+    # to check pA ≤ pM ≤ pB, we add 2π to phases in Q3 if the other node is in Q2.
+    # No need to check Q4 because that would be ΔQ = 2, which makes it a candidate edge.
+    #==
+              0
+        Q4    |    Q1
+              |
+    -π/2--------------π/2 
+              |
+        Q3    |    Q2
+            -π,π
+    ==#
+
+    abs(qA - qB) == 2 && return false
+
+    if qA == 2 && qB == 3
+        pB += 2π
+        qM == 3 && (pM += 2π)
+    elseif qA == 3 && qB == 2
+        pA += 2π
+        qM == 3 && (pM += 2π)
+    end
+    
+    if (pA <= pM <= pB) || (pA >= pM >= pB)
+        Δp = abs(pA - pB)
+        return Δp >= π  # should be false, not sure if it's possible to be true
+    else
+        return true  # is extreme node, must split
+    end
+end
+
+"""
+    findskinnyedges(triangles, mesh, skinny_mode)
+
+Return the longest edge of "skinny" triangles as defined by `refinement_mode`. Returns `nothing` if
+there are no skinny triangles in `triangles`.
+
+# Modes
+
+- `:baseheightratio`: triangle is skinny if the ratio of the longest edge to the triangle's
+height is greater than `skinnyratio`, typically 10
+- `:maxminratio`: triangle is skinny if the ratio of the longest edge to the shortest edge
+is greater than `skinnyratio`, typically 3
+"""
+function findskinnyedges!(edgestosplit::Dict, triangles, mesh, skinny_mode::SkinnyMode)
+    for T in triangles
+        e = _skinnyedge(T, mesh, skinny_mode)
+        isnothing(e) || get!(edgestosplit, minmax(e...), SpecialEdge.Skinny)
+    end
+end
+
+function _skinnyedge(T, mesh, skinny_mode::SkinnyMode)
+    A, B, C = DT.triangle_edges(T)
+
+    lA = edge_length(mesh, A)
+    lB = edge_length(mesh, B)
+    lC = edge_length(mesh, C)
+
+    maxlength, imax = findmax((lA, lB, lC))
+    if isskinny(lA, lB, lC, maxlength, skinny_mode)
+        # return the longest edge
+        imax == 1 && return A
+        imax == 2 && return B
+        return C  # imax == 3
+    else
+        return nothing
+    end
+end
+
+function isskinny(lA, lB, lC, maxlength, m::MaxMinRatio)
+    minlength = minimum((lA, lB, lC))
+    return maxlength/minlength > m.threshold
+end
+
+function isskinny(lA, lB, lC, maxlength, m::BaseHeightRatio)
+    s = (lA + lB + lC)/2
+    area = sqrt(abs(s*(s - lA)*(s - lB)*(s - lC)))  # abs in case s ≈ lA, lB, or lC and term is negative
+    h = 2*area/maxlength  # area = 1/2 × b × h
+    return maxlength/h > m.threshold
+end
+
+"Return all edges of `mesh` not in `edgestosplit` with a length of at least `atol`."
+function remainingedges!(edgestocheck, mesh, edgestosplit, atol)
+    K = keys(edgestosplit)
+    @assert all(issorted, K) "each edge of `edgestosplit` must be sorted with `minmax`"
+    empty!(edgestocheck)
+    for e in each_solid_edge(mesh)
+        se = minmax(e...)
+        if !in(se, K) && (edge_length(mesh, e) > atol)
+            push!(edgestocheck, se)
+        end
+    end
+end
+
+"""
+    analyzegradients!(edgestosplit, mesh, edges, prev_gradients, minlength, numtosplit)
+
+Return up to number `numtosplit` of `edges` for mesh refinement based on indicator value
+``I = α log₁₀(𝓁/minlength)`` where ``α`` is the angle between phase gradient vectors for
+triangles on each side of an edge and ``𝓁`` is the edge length. `minlength` is the length of
+the shortest edge in the mesh.
+
+See also: [`trianglegradient`](@ref)
+"""
+function analyzegradients!(edgestosplit::Dict, ga::GradientAnalysis, mesh, edges::Vector,
+    prev_gradients, minlength, numtosplit)
+    @assert all(issorted, edges) "each edge of `edges` must be sorted by `minmax`"
+
+    # Split every edge if there are fewer edges than we need to split
+    numedges = length(edges)
+    if numedges <= numtosplit
+        foreach(e -> get!(edgestosplit, e, SpecialEdge.Gradient), edges)
+        return nothing
+    end
+
+    append!(ga.indicators, 
+        edgeindicator!(ga.gradients, e, mesh, prev_gradients, minlength) for e in edges)
+    p = partialsortperm(ga.indicators, 1:numtosplit, rev=true)
+    numposindicators = count(>(eps(eltype(ga.indicators))), ga.indicators)
+
+    if numposindicators < numtosplit
+        if numposindicators > 0
+            ve = view(edges, view(p, 1:numposindicators))
+            foreach(e -> get!(edgestosplit, e, SpecialEdge.Gradient), ve)
+            numtosplit -= numposindicators
+        end
+
+        # Fill the remaining by longest edge first up to the remaining numtosplit
+        zerop = view(p, numposindicators+1:lastindex(p))
+        append!(ga.remainingedgelengths, edge_length(mesh, e) for e in view(edges, zerop))
+        l = partialsortperm(ga.remainingedgelengths, 1:numtosplit, rev=true)
+        ve = view(edges, l)
+        foreach(e -> get!(edgestosplit, e, SpecialEdge.Gradient), ve)
+    else  # numposindicators >= numtosplit
+        ve = view(edges, p)
+        foreach(e -> get!(edgestosplit, e, SpecialEdge.Gradient), ve)
     end
     return nothing
 end
 
-"""
-    candidateedges!(E, tess, quadrants)
+"Edge \"indicator\" where larger values signify better candidates for splitting."
+function edgeindicator!(gradients, e, mesh, prev_gradients, minlength)
+    u = get_adjacent(mesh, e)
+    v = get_adjacent(mesh, e[2], e[1])  # reverse edge for triangle on other side
 
-Fill in `Vector` of candidate edges `E` that contain a phase change of 2 quadrants.
-
-Any root or pole is located at the point where the regions described by four different
-quadrants meet. Since any triangulation of the four nodes located in the four different
-quadrants requires at least one edge of ``|ΔQ| = 2``, then all such edges are potentially in
-the vicinity of a root or pole.
-
-`E` is not sorted.
-"""
-function candidateedges!(E, tess, quadrants)
-    # 10%+ better performance than even the v0.4.1 `delaunayedges()`
-    # based on: https://github.com/JuliaGeometry/VoronoiDelaunay.jl/issues/47
-    @inbounds for ix in 2:tess._last_trig_index
-        tr = tess._trigs[ix]
-        isexternal(tr) && continue
-
-        # precalculate
-        atr, btr, ctr = geta(tr), getb(tr), getc(tr)
-        atri, btri, ctri = getindex(atr), getindex(btr), getindex(ctr)
-
-        ix_na = tr._neighbour_a
-        if ix_na > ix || isexternal(tess._trigs[ix_na])
-            ΔQ = mod(quadrants[btri] - quadrants[ctri], 4)  # phase difference
-            if ΔQ == 2
-                edge = DelaunayEdge(btr, ctr)
-                push!(E, edge)
-            end
-        end
-
-        ix_nb = tr._neighbour_b
-        if ix_nb > ix || isexternal(tess._trigs[ix_nb])
-            ΔQ = mod(quadrants[atri] - quadrants[ctri], 4)
-            if ΔQ == 2
-                edge = DelaunayEdge(atr, ctr)
-                push!(E, edge)
-            end
-        end
-
-        ix_nc = tr._neighbour_c
-        if ix_nc > ix || isexternal(tess._trigs[ix_nc])
-            ΔQ = mod(quadrants[atri] - quadrants[btri], 4)
-            if ΔQ == 2
-                edge = DelaunayEdge(atr, btr)
-                push!(E, edge)
-            end
-        end
+    # Edge is on boundary
+    if DT.is_ghost_vertex(u) || DT.is_ghost_vertex(v)
+        return zero(Float64)
     end
+
+    Tu = (e[1], e[2], u)
+    Tv = (e[2], e[1], v)
+
+    gu = gradients[Tu] = get(prev_gradients, Tu, trianglegradient(Tu, mesh))
+    gv = gradients[Tv] = get(prev_gradients, Tv, trianglegradient(Tv, mesh))
+
+    # Calculate angle `α` between phase gradients of adjacent triangles (that share an edge)
+    α = atan(norm(cross(gu, gv)), dot(gu, gv))
+    isnan(α) && (α = π)
+
+    d = edge_length(mesh, e)
+    I = α*log10(d/minlength)
+
+    return I
+end
+
+"""
+    trianglegradient(T, mesh)
+
+Return phase gradient vector for triangle `T`.
+
+# References
+
+See Appendix A of Dziedziewicz, et al., “Self-Adaptive Mesh Generator for Global Complex Roots
+and Poles Finding Algorithm,” doi: 10.1109/TMTT.2023.3238014.
+"""
+function trianglegradient(T, mesh)
+    A, B, C = triangle_vertices(T)
+    
+    pA, pB, pC = angle.(fval(mesh, A, B, C))
+
+    # Phase differences
+    ΔpAB = phasediff(pA, pB)
+    ΔpBC = phasediff(pB, pC)
+    ΔpCA = phasediff(pC, pA)
+
+    circulation = ΔpAB + ΔpBC + ΔpCA
+
+    # Gradient can only be unambiguously determined if the phases sum to zero
+    # this is not the case if the triangle has a candidate edge, for example
+    if abs(circulation) > 1e-12
+        g = SVector(0.0, 0.0)
+    else
+        cA, cB, cC = coord(mesh, A, B, C)
+
+        W = @SMatrix [cB[1]-cA[1] cB[2]-cA[2]
+                      cC[1]-cA[1] cC[2]-cA[2]]
+        Wd = SVector(ΔpAB, -ΔpCA)
+
+        g = W\Wd
+    end
+
+    return g
+end
+
+"Maintain -π ≤ Δp ≤ π"
+function phasediff(pA, pB)
+    Δp =  pB - pA
+    if Δp > π
+        Δp -= 2π
+    elseif Δp < -π
+        Δp += 2π
+    end
+    return Δp
+end
+
+"""
+    midpointcoords!(newcoords, splitedges, mesh, edgestosplit)
+
+Update `newcoords` in place with coordinates at the midpoint of each edge in `edgestosplit`.
+Also updates `splitedges` in place with tuples of `(u, v, i)` for vertices `u, v` of each
+edge and what will be the index of the new vertex in the mesh, `i`.
+"""
+function midpointcoords!(splitedges, mesh, edgestosplit)
+    empty!(splitedges)
+    offset = num_solid_vertices(mesh)
+    for (i, e) in enumerate(keys(edgestosplit))
+        u, v = edge_vertices(e)
+        push!(mesh.coords, midpoint(mesh, u, v))
+        push!(splitedges, (u, v, offset+i))
+    end
+end
+
+"""
+    adaptive()
+"""
+function adaptive!(edgestosplit::Dict, ga::GradientAnalysis, mesh, previter, edgestocheck,
+    tol, skinny_mode::SkinnyMode=BaseHeightRatio())
+
+    # Set edge length tolerance for adaptive refinement
+    minlength = minimum(e->edge_length(mesh, e), each_solid_edge(mesh))
+    atol = max(minlength, tol)
+
+    # Check condition (5) of SAGRPF for new node zM added to the center of zA and zB:
+    # min{ϕA, ϕB} ≤ ϕM ≤ max{ϕA, ϕB}
+    # If condition is not met, split all edges attached to node zM
+    findextremeedges!(edgestosplit, previter.splitedges, mesh)
+
+    # Always split at least one edge in gradient analysis. Don't count skinny edges.
+    numtosplit = max(1, length(edgestosplit))
+
+    # Longest edge of "skinny" triangles
+    triangles = (T for T in each_solid_triangle(mesh) if !in(T, previter.triangles))
+    findskinnyedges!(edgestosplit, triangles, mesh, skinny_mode)
+
+    remainingedges!(edgestocheck, mesh, edgestosplit, atol)
+    filter!(e->edge_length(mesh, e.first) > tol, edgestosplit)
+    analyzegradients!(edgestosplit, ga, mesh, edgestocheck, previter.gradients, minlength, numtosplit)
+
+    copy!(previter.gradients, ga.gradients)
+    empty!(previter.triangles)  # avoids allocating a Set of each_solid_triangle in copy!
+    union!(previter.triangles, each_solid_triangle(mesh))
 
     return nothing
 end
 
-"""
-    candidateedges!(E, phasediffs, tess, quadrants)
-
-If `phasediffs` is a `Vector`, then the phase difference across each edge is `push!`ed
-into `phasediffs`. This is useful for plotting.
-
-Both `E` and `phasediffs` are updated in place.
-"""
-function candidateedges!(E, phasediffs, tess, quadrants)
-    for edge in delaunayedges(tess)
-        nodea, nodeb = geta(edge), getb(edge)
-        idxa, idxb = getindex(nodea), getindex(nodeb)
-
-        # NOTE: To match Matlab, force `idxa` < `idxb`
-        # (order doesn't matter for `ΔQ == 2`, which is the only case we care about)
-        # if idxa > idxb
-        #     idxa, idxb = idxb, idxa
-        # end
-
-        ΔQ = mod(quadrants[idxa] - quadrants[idxb], 4)  # phase difference
-        if ΔQ == 2
-            push!(E, edge)
-        end
-
-        if phasediffs isa Vector
-            push!(phasediffs, ΔQ)
-        end
-    end
-end
-
-"""
-    zone(triangle, edge_idxs)
-
-Return zone `1` or `2` for `DelaunayTriangle` `triangle`.
-
-Zone `1` triangles have more than one node in `edge_idxs`, whereas zone `2` triangles have
-only a single node.
-"""
-function zone(triangle, edge_idxs)
-    na = geta(triangle)
-    nb = getb(triangle)
-    nc = getc(triangle)
-
-    nai = getindex(na)
-    nbi = getindex(nb)
-    nci = getindex(nc)
-
-    zone2 = false
-    for idx in edge_idxs
-        # with Julia 1.4.2: | is faster than || here
-        if nai == idx || nbi == idx || nci == idx
-            if !zone2
-                # we need to keep searching b/c it might be zone 1
-                zone2 = true
-            else
-                # zone1 = true
-                return 1
-            end
-        end
-    end
-
-    return zone2 ? 2 : 0
-end
-
-"""
-    uniqueindices!(idxs, edges)
-
-Compute unique indices `idxs` in-place of all nodes in `edges`.
-"""
-function uniqueindices!(idxs, edges)
-    empty!(idxs)
-    for e in edges
-        push!(idxs, getindex(geta(e)), getindex(getb(e)))
-    end
-    sort!(idxs)  # calling `sort!` first makes `unique!` more efficient
-    unique!(idxs)
-    return nothing
-end
-
-"""
-    zone1newnodes!(newnodes, triangles, g2f, tolerance)
-
-Add nodes (points) to `newnodes` in-place if they are in zone 1, i.e. triangles that had more than
-one node.
-
-`tolerance` is the minimum edge length an edge must have to go in `newnodes`.
-"""
-function zone1newnodes!(newnodes, triangles, g2f, tolerance)
-    triangle1 = triangles[1]
-    n1a = geta(triangle1)
-    n1b = getb(triangle1)
-    push!(newnodes, (n1a+n1b)/2)
-
-    @inbounds for ii = 1:length(triangles)-1
-        triangle = triangles[ii]
-        na = geta(triangle)
-        nb = getb(triangle)
-        nc = getc(triangle)
-
-        addnewnode!(newnodes, nb, nc, g2f, tolerance)
-        addnewnode!(newnodes, nc, na, g2f, tolerance)
-        addnewnode!(newnodes, geta(triangles[ii+1]), getb(triangles[ii+1]), g2f, tolerance)
-    end
-    te = triangles[end]
-    na = geta(te)
-    nb = getb(te)
-    nc = getc(te)
-    addnewnode!(newnodes, nb, nc, g2f, tolerance)
-    addnewnode!(newnodes, nc, na, g2f, tolerance)
-
-    # Remove the first of `newnodes` if the edge is too short
-    distance(g2f(n1a), g2f(n1b)) < tolerance && popfirst!(newnodes)
-    return nothing
-end
-
-@inline function addnewnode!(newnodes, node1, node2, g2f, tolerance)
-    if distance(g2f(node1), g2f(node2)) > tolerance
-        avgnode = (node1+node2)/2
-        for p in newnodes
-            distance(p, avgnode) < 2*eps() && return nothing
-        end
-        push!(newnodes, avgnode)  # only executed if we haven't already returned
+"Return `e` if `e` is in `k` or return `reverse(e)` if `reverse(e)` is in `k`. Otherwise, return `nothing`."
+function edgekey(k, e)
+    re = DT.reverse_edge(e)
+    for v in k
+        v == e && return e
+        v == re && return re
     end
     return nothing
 end
 
-"""
-    zone2newnodes!(newnodes, triangle, skinnytriangle)
-
-Add node to `newnodes` for zone 2 ("skinny") triangles.
-
-`skinnytriangle` is the maximum allowed ratio of the longest to shortest side length.
-"""
-@inline function zone2newnode!(newnodes, triangle, skinnytriangle)
-    na = geta(triangle)
-    nb = getb(triangle)
-    nc = getc(triangle)
-
-    # For skinny triangle check, `geom2fcn` not needed because units cancel out
-    l1 = distance(na, nb)
-    l2 = distance(nb, nc)
-    l3 = distance(nc, na)
-    if max(l1,l2,l3)/min(l1,l2,l3) > skinnytriangle
-        avgnode = (na+nb+nc)/3
-        push!(newnodes, avgnode)
-    end
+function increment_solid!(d, e, k)
+    DT.is_ghost_edge(e) && return nothing
+    ee = edgekey(k, e)  # existing edge
+    isnothing(ee) ? d[e] = 1 : d[ee] += 1
     return nothing
 end
 
-"""
-    splittriangles!(zone1triangles, newnodes, tess, edge_idxs, params)
+findcandidatetriangles(mesh, candidateedges) =
+    Set(Iterators.flatten(candidatetriangle(mesh, e) for e in candidateedges))
 
-Add zone 2 triangles to `newnodes` and then update `Vector` `zone1triangles`, which require
-special handling.
-"""
-function splittriangles!(zone1triangles, newnodes, tess, edge_idxs, params)
-    empty!(zone1triangles)
-    for triangle in tess
-        z = zone(triangle, edge_idxs)
+function candidatetriangle(mesh, e)
+    # Need to gather candidate triangles first, rather than edges
+    # Otherwise, two candidate edges part of the same triangle will cause an external
+    # edge to be counted twice and deleted when it shouldn't be
+    u = get_adjacent(mesh, e)
+    v = get_adjacent(mesh, e[2], e[1])  # reverse edge for triangle on other side
 
-        if z == 1
-            push!(zone1triangles, triangle)
-        elseif z == 2
-            zone2newnode!(newnodes, triangle, params.skinnytriangle)
-        end
-    end
-    return nothing
+    return DT.sort_triangle(e[1], e[2], u), DT.sort_triangle(e[2], e[1], v)
 end
 
-"""
-    findnextnode(prevnode, refnode, nodes, g2f)
-
-Find the index of the next node in `nodes` as part of the candidate region boundary process.
-The next one (after the reference) is picked from the fixed set of nodes.
-"""
-function findnextnode(prevnode, refnode, nodes, g2f)
-    P = g2f(prevnode)
-    S = g2f(refnode)
-
-    minphi = 2π + 1  # max diff of angles is 2π, so this is guaranteed larger
-    minphi_idx = firstindex(nodes)
-
-    for i in eachindex(nodes)
-        N = g2f(nodes[i])
-
-        SP = P - S
-        SN = N - S
-
-        phi = mod2pi(angle(SP) - angle(SN))
-
-        if phi < minphi
-            minphi = phi
-            minphi_idx = i
-        end
+function contouredges(triangles)
+    edgecount = Dict{EDGETYPE,Int8}()
+    for T in triangles
+        k = keys(edgecount)
+        A, B, C = DT.triangle_edges(T)
+        foreach(ee -> increment_solid!(edgecount, ee, k), (A, B, C))
     end
-
-    return minphi_idx
+    return edgecount
 end
 
-"""
-    contouredges(tess, edges)
+function refinemesh!(f, mesh; params::FinderParams, refinement_mode=:adaptive,
+    skinny_mode::SkinnyMode=BaseHeightRatio(),
+    iterations::Union{Nothing,MeshIterations}=nothing)
 
-Find contour edges from all candidate `edges`.
-"""
-function contouredges(tess, edges)
-    C = Vector{DelaunayEdge{IndexablePoint2D}}()
-    sizehint!(C, length(edges))
+    (; maxiters, maxnodes, maxadaptivenodes, tol, numtasks) = params
 
-    # Edges of triangles that contain at least 1 of `edges`
-    for triangle in tess
-        pa, pb, pc = geta(triangle), getb(triangle), getc(triangle)
-        pai, pbi, pci = getindex(pa), getindex(pb), getindex(pc)
+    previter = PreviousIteration(
+        Dict{TRIANGLETYPE,SVector{2,Float64}}(),  # gradients
+        Set{TRIANGLETYPE}(),  # prev_splitedges
+        Set{TRIANGLETYPE}(),  # prev_triangles
+    )
 
-        for edge in edges
-            eai, ebi = getindex(geta(edge)), getindex(getb(edge))
+    ga = GradientAnalysis(
+        Dict{TRIANGLETYPE,SVector{2,Float64}}(),
+        Vector{Float64}(),
+        Vector{Float64}()
+    )
 
-            if (eai == pai && ebi == pbi) || (eai == pbi && ebi == pai) ||
-                (eai == pbi && ebi == pci) || (eai == pci && ebi == pbi) ||
-                (eai == pci && ebi == pai) || (eai == pai && ebi == pci)
-                push!(C, DelaunayEdge(pa,pb), DelaunayEdge(pb,pc), DelaunayEdge(pc,pa))
-                break  # only count each triangle once
-            end
+    edgestosplit = Dict{EDGETYPE, SpecialEdge.T}()
+    edgestocheck = Vector{EDGETYPE}()  # ordered Vector needed
+    candidatetriangles = Set{TRIANGLETYPE}()
+
+    iter = 0
+    startind = 1
+    while iter < maxiters && num_solid_vertices(mesh) < maxnodes && refinement_mode in (:adaptive, :regular)
+        iter += 1
+
+        if iter > 1
+            startind = num_solid_vertices(mesh) + 1
+            addpoints!(mesh)
         end
-    end
 
-    # Remove duplicate edges
-    sameunique!(C)
+        evalfcn!(f, mesh, startind; numtasks)
+        empty!(edgestosplit)
+        findcandidateedges!(edgestosplit, mesh)
 
-    return C
-end
+        if refinement_mode == :adaptive
+            empty!(ga)
+            adaptive!(edgestosplit, ga, mesh, previter, edgestocheck, tol, skinny_mode)
 
-"""
-    evaluateregions!(C, g2f)
-"""
-function evaluateregions!(C, g2f)
-    # NOTE: The nodes of each region are in reverse order compared to Matlab with respect
-    # to their quadrants
-
-    # Initialize
-    numregions = 1
-    regions = [[geta(C[1])]]
-    refnode = getb(C[1])
-    popfirst!(C)
-
-    nextedgeidxs = similar(Array{Int}, axes(C))
-    empty!(nextedgeidxs)
-    while length(C) > 0
-
-        # This loop is equivalent to `findall(e->geta(e)==refnode, C)`
-        # but avoids closure Core.Box issue
-        for i in eachindex(C)
-            if geta(C[i]) == refnode
-                push!(nextedgeidxs, i)
+            if num_solid_vertices(mesh) >= maxadaptivenodes
+                refinement_mode = :regular
             end
         end
 
-        if !isempty(nextedgeidxs)
-            if length(nextedgeidxs) == 1
-                nextedgeidx = only(nextedgeidxs)
-            else
-                prevnode = regions[numregions][end]
-                tempnodes = getb.(C[nextedgeidxs])
-                idx = findnextnode(prevnode, refnode, tempnodes, g2f)
-                nextedgeidx = nextedgeidxs[idx]
-            end
-
-            nextedge = C[nextedgeidx]
-            push!(regions[numregions], geta(nextedge))
-            refnode = getb(nextedge)
-            deleteat!(C, nextedgeidx)
-        else # isempty
-            push!(regions[numregions], refnode)
-            # New region
-            numregions += 1
-            push!(regions, [geta(C[1])])
-            refnode = getb(C[1])
-            popfirst!(C)
+        if refinement_mode == :regular
+            empty!(candidatetriangles)
+            candidateedges = getcandidateedges(edgestosplit)
+            union!(candidatetriangles, Iterators.flatten(candidatetriangle(mesh, e) for e in candidateedges))
+            findskinnyedges!(edgestosplit, candidatetriangles, mesh, skinny_mode)
+            filter!(e -> edge_length(mesh, e.first) > tol, edgestosplit)
         end
 
-        # reset `nextedgeidxs`
-        empty!(nextedgeidxs)
-    end
-
-    push!(regions[numregions], refnode)
-
-    return regions
-end
-
-"""
-    rootsandpoles(regions, quadrants, g2f)
-
-Identify roots and poles of function based on `regions` (usually a `Vector{Vector{IndexablePoint2D}}`)
-and `quadrants`.
-"""
-function rootsandpoles(regions, quadrants, g2f::Geometry2Function{T}) where T
-    complexT = complex(T)
-    zroots = Vector{complexT}()
-    zpoles = Vector{complexT}()
-    for r in regions
-        quadrantsequence = [quadrants[getindex(node)] for node in r]
-
-        # Sign flip because `r` are in opposite order of Matlab?
-        dq = -diff(quadrantsequence)
-        for i in eachindex(dq)
-            if dq[i] == 3
-                dq[i] = -1
-            elseif dq[i] == -3
-                dq[i] = 1
-            elseif abs(dq[i]) == 2
-                # ``|ΔQ| = 2`` is ambiguous; cannot tell whether phase increases or
-                # decreases by two quadrants
-                dq[i] = 0
-            end
+        candidateedges = getcandidateedges(edgestosplit)
+        if !isempty(candidateedges) && all(e -> edge_length(mesh, e) < tol, candidateedges)
+            refinement_mode = :accuracy_achieved
         end
-        q = sum(dq)/4
-        z = sum(g2f.(r))/length(r)
 
-        if q > 0
-            push!(zroots, convert(complexT, z))  # convert in case T isn't Float64
-        elseif q < 0
-            push!(zpoles, convert(complexT, z))
-        end
-    end
-
-    return zroots, zpoles
-end
-
-"""
-    tesselate!(tess, newnodes, f::ScaledFunction, params, pd=nothing)
-
-Label quadrants, identify candidate edges, and iteratively split triangles, returning
-the tuple `(tess, E, quadrants)`.
-"""
-function tesselate!(tess, newnodes, f::ScaledFunction, params, pd=nothing)
-    # Initialize
-    numnodes = tess._total_points_added
-    @assert numnodes == 0
-
-    g2f = f.g2f
-
-    E = Vector{DelaunayEdge{IndexablePoint2D}}()
-    phasediffs = Vector{Int}()
-    quadrants = Vector{Int}()
-    edge_idxs = Vector{Int}()
-    zone1triangles = Vector{DelaunayTriangle{IndexablePoint2D}}()
-
-    iteration = 0
-    while iteration < params.maxiterations && numnodes < params.maxnodes
-        iteration += 1
-
-        # Determine which quadrant function value belongs at each node
-        numnewnodes = length(newnodes)
-        append!(quadrants, Vector{Int}(undef, numnewnodes))
-        assignquadrants!(quadrants, newnodes, f, params.multithreading)
-
-        # Add new nodes to `tess`
-        push!(tess, newnodes)
-        numnodes += numnewnodes
-
-        # Determine candidate edges that may be near a root or pole
-        empty!(E)  # start with a blank E
-        if pd isa PlotData
-            empty!(phasediffs)
-            candidateedges!(E, phasediffs, tess, quadrants)
+        if isempty(edgestosplit)
+            refinement_mode = :aborted_empty_edgestosplit
         else
-            candidateedges!(E, tess, quadrants)
+            midpointcoords!(previter.splitedges, mesh, edgestosplit)
         end
-        isempty(E) && return tess, E, quadrants, phasediffs  # no roots or poles found
 
-        # Select candidate edges that are longer than the chosen tolerance
-        selectE = filter(e -> longedge(e, params.tolerance, g2f), E)
-        isempty(selectE) && return tess, E, quadrants, phasediffs
-
-        # return if maximum edge length has reached tolerance
-        maxElength = maximum(distance(g2f(e)) for e in selectE)
-        maxElength < params.tolerance && return tess, E, quadrants, phasediffs
-
-        # Get unique indices of nodes in `edges`
-        uniqueindices!(edge_idxs, selectE)
-
-        # Refine (split) triangles
-        empty!(newnodes)
-        splittriangles!(zone1triangles, newnodes, tess, edge_idxs, params)
-
-        # Add new nodes in zone 1
-        zone1newnodes!(newnodes, zone1triangles, g2f, params.tolerance)
-
-        # Have to assign indexes to new nodes (which are all currently -1)
-        setindex!.(newnodes, (1:length(newnodes)).+numnodes)
+        if !isnothing(iterations)
+            push_mesh!(iterations, copy(mesh))
+            push_edges!(iterations, copy(edgestosplit))
+            push_mode!(iterations, refinement_mode)
+        end
     end
 
-    iteration >= params.maxiterations && @warn "params.maxiterations reached"
-    numnodes >= params.maxnodes && @warn "params.maxnodes reached"
-
-    return tess, E, quadrants, phasediffs
+    if iter >= maxiters
+        @info "Refinement aborted. `maxiters` reached."
+    elseif num_solid_vertices(mesh) >= maxnodes
+        candidateedges = getcandidateedges(edgestosplit)
+        @info "Refinement aborted. `maxnodes` reached."
+    end
 end
 
-function setup(origcoords)
-    rmin, rmax = minimum(real, origcoords), maximum(real, origcoords)
-    imin, imax = minimum(imag, origcoords), maximum(imag, origcoords)
+function buildregions(mesh)
+    candidateedges = findcandidateedges(mesh)
+    triangles = findcandidatetriangles(mesh, candidateedges)
+    edgecount = contouredges(triangles)
+    filter!(p->p.second == 1, edgecount)  # select edges that were part of a single triangle
 
-    # Scaling parameters
-    g2f = Geometry2Function(rmin, rmax, imin, imax)
-    scaledorigcoords = fcn2geom.(origcoords, rmin, rmax, imin, imax)
+    contours = Vector{Set{EDGETYPE}}()
+    contourcount = 1
 
-    @assert minimum(real, scaledorigcoords) >= min_coord &&
-        minimum(imag, scaledorigcoords) >= min_coord &&
-        maximum(real, scaledorigcoords) <= max_coord &&
-        maximum(imag, scaledorigcoords) <= max_coord "Scaled coordinates out of bounds"
+    # Pick an edge from edgecount and then look for a connecting edge among the remaining edges
+    k, _ = pop!(edgecount)
+    push!(contours, Set((k,)))  # must be done for every new contour
+    a, b = k  # vertex `b` is starting point
 
-    newnodes = [IndexablePoint2D(real(coord), imag(coord), idx) for (idx, coord) in
-                enumerate(scaledorigcoords)]
+    while !isempty(edgecount)
+        closedcontour = false
+        matchfound = false
+        for k in keys(edgecount)  # edges
+            u, v = k
 
-    return newnodes, g2f
+            if u == b
+                delete!(edgecount, k)
+                push!(contours[contourcount], k)
+                v == a && (closedcontour = true)
+                b = v
+                matchfound = true
+            elseif v == b
+                delete!(edgecount, k)
+                push!(contours[contourcount], k)
+                u == a && (closedcontour = true)
+                b = u
+                matchfound = true
+            end
+
+            if closedcontour && !isempty(edgecount)
+                #==
+                Edge case: Two contours share a node. `closedcontour` is satisifed when one
+                of them closes. This is not desired - they are likely a single root/pole.
+                  ________
+                 /        \  _____
+                /          \/     |
+                \          .      |
+                 \________/\_____/
+
+                ==#
+                k = tangentcontour(edgecount, contours[contourcount])
+                if isnothing(k)
+                    contourcount += 1
+                    k, _ = pop!(edgecount)
+                    push!(contours, Set((k,)))
+                    a, b = k
+                    break
+                else
+                    delete!(edgecount, k)
+                    push!(contours[contourcount], k)
+                    a, b = k
+                    break
+                end
+            elseif matchfound
+                # keys(edgecount) has changed, so break out of the for loop (and reenter)
+                break
+            end
+        end
+        if !matchfound
+            contourcount += 1
+            k, _ = pop!(edgecount)
+            push!(contours, Set((k,)))  # must be done for every new contour
+            a, b = k  # vertex `b` is starting point
+        end
+    end
+    return contours
+end
+
+"If a vertex of `contour` is still in `edgecount`, return `(a, b)` where `a` is the tangent."
+function tangentcontour(edgecount, contour)
+    for k in keys(edgecount)
+        a, b = k
+        for c in contour
+            u, v = c
+            if a == u || a == v
+                return (a, b)
+            elseif b == u || b == v
+                return (b, a)
+            end
+        end
+    end
+    return nothing
+end
+
+"Average location of contour nodes."
+function centerofmass(mesh, contour)
+    p = Set(coord(mesh, c) for c in Iterators.flatten(contour))  # Set removes redundant nodes
+    z = sum(x->complex(x...), p)/length(p)  # average of contour nodes
+    return z
+end
+
+function evaluateregion(mesh, contour)
+    q = zero(Float64)  # gets divided by 4
+    for e in contour
+        A, B = edge_vertices(e)
+        
+        # Shortcut in case one of the vertices is exactly a root or a pole
+        zA, zB = fval(mesh, A, B)
+        if iszero(zA)
+            return (complex(coord(mesh, A)...), 1)
+        elseif iszero(zB)
+            return (complex(coord(mesh, B)...), 1)
+        elseif isinf(zA) || isnan(zA)
+            return (complex(coord(mesh, A)...), -1)
+        elseif isinf(zB) || isnan(zB)
+            return (complex(coord(mesh, B)...), -1)
+        end
+
+        qA, qB = quadrant(mesh, A, B)
+        ΔQ = qB - qA
+        ΔQ == 3 && (ΔQ = -1)
+        ΔQ == -3 && (ΔQ = 1)
+        abs(ΔQ) == 2 && @warn "|ΔQ| == 2 should not be along candidate boundary"
+        q += ΔQ
+    end
+    q /= 4
+    z = centerofmass(mesh, contour)
+
+    return z, q
+end
+
+function evaluateregions(mesh, contours)
+    roots = Vector{ComplexF64}()
+    poles = similar(roots)
+    for c in contours
+        z, q = evaluateregion(mesh, c)
+        if isroot(q)
+            push!(roots, z)
+        elseif ispole(q)
+            push!(poles, z)
+        end
+    end
+    return roots, poles
+end
+
+function evaluateregions(mesh, contours, ::ReturnMultiplicity)
+    roots = Vector{ComplexF64}()
+    poles = similar(roots)
+    rootmultiplicity = Vector{Float64}()
+    polemultiplicity = similar(rootmultiplicity)
+    for c in contours
+        z, q = evaluateregion(mesh, c)
+        if isroot(q)
+            push!(roots, z)
+            push!(rootmultiplicity, q)
+        elseif ispole(q)
+            push!(poles, z)
+            push!(polemultiplicity, q)
+        end
+    end
+    return roots, poles, rootmultiplicity, polemultiplicity
+end
+
+isroot(q) = q > 0
+ispole(q) = q < 0
+
+"""
+    rootsandpoles(f, mesh::ComplexMesh;
+        params=FinderParams(),
+        refinement_mode=:adaptive,
+        dedupe=true,
+        skinny_mode::SkinnyMode=BaseHeightRatio(),
+        iterations::Union{Nothing,MeshIterations}=nothing)
+
+Return `roots` and `poles` of the function `f` given the initial complex plane `mesh` over
+which to search.
+
+`mesh` is modified in place.
+"""
+function rootsandpoles(f, mesh::ComplexMesh;
+    params=FinderParams(),
+    refinement_mode=:adaptive,
+    dedupe=true,
+    skinny_mode::SkinnyMode=BaseHeightRatio(),
+    iterations::Union{Nothing,MeshIterations}=nothing)
+
+    refinemesh!(f, mesh; params, refinement_mode, skinny_mode, iterations)
+
+    contours = buildregions(mesh)
+    roots, poles = evaluateregions(mesh, contours)
+
+    if dedupe
+        dedupe!(roots, poles; tol=params.tol)
+    end
+
+    return roots, poles
 end
 
 """
-    grpf(fcn, origcoords, params=GRPFParams())
+    rootsandpoles(f, mesh::ComplexMesh, ::ReturnMultiplicity;
+        params=FinderParams(),
+        refinement_mode=:adaptive,
+        dedupe=true,
+        skinny_mode::SkinnyMode=BaseHeightRatio(),
+        iterations::Union{Nothing,MeshIterations}=nothing)
 
-Return a vector `roots` and a vector `poles` of a single (complex) argument function
-`fcn`.
-
-Searches within a domain specified by the vector of complex `origcoords`.
-
-# Examples
-```jldoctest
-julia> simplefcn(z) = (z - 1)*(z - im)^2*(z + 1)^3/(z + im)
-
-julia> xb, xe = -2, 2
-
-julia> yb, ye = -2, 2
-
-julia> r = 0.1
-
-julia> origcoords = rectangulardomain(complex(xb, yb), complex(xe, ye), r)
-
-julia> roots, poles = grpf(simplefcn, origcoords);
-
-julia> roots
-3-element Array{Complex{Float64},1}:
-    -0.9999999998508017 - 8.765385802810127e-11im
- 1.3587683359414186e-10 + 1.0000000001862643im
-     1.0000000002536367 + 1.0339757656912847e-26im
-
-julia> poles
-1-element Array{Complex{Float64},1}:
- -2.5363675604239815e-10 - 1.0000000002980232im
-```
+Return `roots`, `poles`, `rootmult`, and `polemult` multiplicities if `ReturnMultiplicity()`
+is also provided to the `rootsandpoles` function.
 """
-function grpf(fcn, origcoords, params=GRPFParams())
-    newnodes, g2f = setup(origcoords)
-    f = ScaledFunction(fcn, g2f)
+function rootsandpoles(f, mesh::ComplexMesh, ::ReturnMultiplicity;
+    params=FinderParams(),
+    refinement_mode=:adaptive,
+    dedupe=true,
+    skinny_mode::SkinnyMode=BaseHeightRatio(),
+    iterations::Union{Nothing,MeshIterations}=nothing)
 
-    tess = DelaunayTessellation2D{IndexablePoint2D}(params.tess_sizehint)
+    refinemesh!(f, mesh; params, refinement_mode, skinny_mode, iterations)
 
-    tess, E, quadrants, _ = tesselate!(tess, newnodes, f, params)
+    contours = buildregions(mesh)
+    roots, poles, rootmult, polemult = evaluateregions(mesh, contours, ReturnMultiplicity())
+    
+    if dedupe
+        oroots = copy(roots)
+        opoles = copy(poles)
+        dedupe!(roots, poles; tol=params.tol)
 
-    complexT = complex(eltype(g2f))
-    isempty(E) && return Vector{complexT}(), Vector{complexT}()
+        # Remove multiplicities that had their roots/poles deduped
+        Ir = findall(in(roots), oroots)
+        Ip = findall(in(poles), opoles)
 
-    C = contouredges(tess, E)
-    regions = evaluateregions!(C, g2f)
-    zroots, zpoles = rootsandpoles(regions, quadrants, g2f)
+        keepat!(rootmult, Ir)
+        keepat!(polemult, Ip)
+    end
 
-    return zroots, zpoles
+    return roots, poles, rootmult, polemult
 end
 
-"""
-    grpf(fcn, origcoords, ::PlotData, params=GRPFParams())
-
-Variant of `grpf` that returns `quadrants`, `phasediffs`, the `VoronoiDelauany`
-tesselation `tess`, and the `Geometry2Function` struct `g2f` for converting from the
-`VoronoiDelaunay` to function space, in addition to `zroots` and `zpoles`.
-
-These additional outputs are primarily for plotting or diagnostics.
-
-# Examples
-```
-julia> roots, poles, quadrants, phasediffs, tess, g2f = grpf(simplefcn, origcoords, PlotData());
-```
-"""
-function grpf(fcn, origcoords, ::PlotData, params=GRPFParams())
-    newnodes, g2f = setup(origcoords)
-    f = ScaledFunction(fcn, g2f)
-
-    tess = DelaunayTessellation2D{IndexablePoint2D}(params.tess_sizehint)
-
-    tess, E, quadrants, phasediffs = tesselate!(tess, newnodes, f, params, PlotData())
-
-    complexT = complex(eltype(g2f))
-    isempty(E) && return (Vector{complexT}(), Vector{complexT}(), quadrants, phasediffs,
-                          tess, g2f)
-
-    C = contouredges(tess, E)
-    regions = evaluateregions!(C, g2f)
-    zroots, zpoles = rootsandpoles(regions, quadrants, g2f)
-
-    return zroots, zpoles, quadrants, phasediffs, tess, g2f
-end
-
-end # module
+end  # module

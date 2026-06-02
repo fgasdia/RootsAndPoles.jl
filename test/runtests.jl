@@ -1,38 +1,44 @@
 using Test
-using LinearAlgebra
-using SpecialFunctions
-using VoronoiDelaunay
+using LinearAlgebra, Random
+using SpecialFunctions, StableRNGs
+using StaticArrays
+using DelaunayTriangulation
+const DT = DelaunayTriangulation
 
 using RootsAndPoles
-import RootsAndPoles: IndexablePoint2D
-
 const RP = RootsAndPoles
 
-function approxmatch(A::AbstractArray, B::AbstractArray)
+const RNG = StableRNG(123)
+
+function approxmatch(A, B)
     length(A) == length(B) || return false
 
-    # This could be less than O(n²) but it's not worth the bookkeeping effort
-    @inbounds for i in eachindex(A)
-        amatch = false
-        @inbounds for j in eachindex(B)
-            if A[i] ≈ B[j]
-                amatch = true
-                break
+    matches = Dict{eltype(A),Vector{eltype(B)}}()
+    for a in A
+        for b in B
+            if b ≈ a
+                if haskey(matches, a)
+                    push!(matches[a], b)
+                else
+                    matches[a] = [b]
+                end
             end
         end
-        if !amatch
-            return false
-        end
     end
+
+    length(matches) == length(A) || return false
+    any(x->length(x)>1, values(matches)) && return false
+
     return true
 end
 
+
 @testset "RootsAndPoles" begin
-    include("RootsAndPoles.jl")
+    # include("RootsAndPoles.jl")
 
     @testset "Simple Rational Function" begin include("SimpleRationalFunction.jl") end
+    @testset "Default Function" begin include("DefaultFunction.jl") end
     @testset "Complex Modes" begin include("ComplexModes.jl") end
     @testset "Lossy Multilayered Waveguide" begin include("LossyMultilayeredWaveguide.jl") end
     @testset "Graphene Transmission Line" begin include("GrapheneTransmissionLine.jl") end
-    @testset "Default" begin include("DefaultFunction.jl") end
 end

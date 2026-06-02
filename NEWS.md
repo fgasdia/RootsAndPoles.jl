@@ -2,6 +2,8 @@
 
 Important notices about MAJOR and MINOR version releases.
 
+- `v2.0.0`: Major breaking changes to interface. Change of triangulation library from VoronoiDelaunay.jl to DelaunayTriangulation.jl. Updated multi-tasking approach. Implementation of SA-GRPF algorithm.
+
 - `v1.5.0`: Minimum Julia version now `v1.7`. Removes custom implementation of fast `delaunayedges`.
 
 - `v1.4.0`: Provides a new function for preparing data for plotting, `getplotdata`.
