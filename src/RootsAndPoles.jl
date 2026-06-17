@@ -784,7 +784,12 @@ ispole(q) = q < 0
 Return `roots` and `poles` of the function `f` given the initial complex plane `mesh` over
 which to search.
 
-`mesh` is modified in place.
+- `dedupe` removes duplicate roots and poles within `params.tol`.
+- `iterations` saves results at each iteration of the mesh refinement.
+
+!!! warning
+
+    `mesh` is modified in place.
 """
 function rootsandpoles(f, mesh::ComplexMesh;
     params=FinderParams(),

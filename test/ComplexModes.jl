@@ -89,3 +89,11 @@ zroots, zpoles = rootsandpoles(complexmodes, densecoords; params=FinderParams(ma
 
 @test approxmatch(zroots, true_zroots)
 @test approxmatch(zpoles, true_zpoles)
+
+# multithreaded
+params = FinderParams(maxadaptivenodes=3000, numtasks=Threads.nthreads())
+coords = deepcopy(origcoords)
+zroots, zpoles = rootsandpoles(complexmodes, coords; params)
+
+@test approxmatch(zroots, true_zroots)
+@test approxmatch(zpoles, true_zpoles)

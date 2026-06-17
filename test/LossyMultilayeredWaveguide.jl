@@ -57,3 +57,11 @@ zroots, zpoles = rootsandpoles(wvgd, coords; iterations)
 
 @test approxmatch(zroots, true_zroots)
 @test approxmatch(zpoles, true_zpoles)
+
+# multithreaded
+params = FinderParams(numtasks=Threads.nthreads())
+coords = deepcopy(origcoords)
+zroots, zpoles = rootsandpoles(wvgd, coords; params)
+
+@test approxmatch(zroots, true_zroots)
+@test approxmatch(zpoles, true_zpoles)
