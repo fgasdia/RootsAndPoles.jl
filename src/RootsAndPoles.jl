@@ -150,19 +150,11 @@ Function evaluation is multithreaded into number `numtasks` of tasks.
 """
 function evalfcn!(f, mesh, startindex; numtasks=Threads.nthreads())
     indices = startindex:lastindex(mesh)
-    if numtasks == 1
-        for i in indices
+    @sync for inds in chunks(indices; n=numtasks, split=RoundRobin())
+        @spawn for i in inds
             z = complex(coord(mesh, i)...)
             v = f(z)
             fval!(mesh, i, v)
-        end
-    else
-        @sync for inds in chunks(indices; n=numtasks, split=RoundRobin())
-            @spawn for i in inds
-                z = complex(coord(mesh, i)...)
-                v = f(z)
-                fval!(mesh, i, v)
-            end
         end
     end
 end
@@ -455,8 +447,14 @@ function midpointcoords!(splitedges, mesh, edgestosplit)
     offset = num_solid_vertices(mesh)
     for (i, e) in enumerate(keys(edgestosplit))
         u, v = edge_vertices(e)
-        push!(mesh.coords, midpoint(mesh, u, v))
-        push!(splitedges, (u, v, offset+i))
+        mpt = midpoint(mesh, u, v)
+
+        # Must check if mpt is already in mesh.coords, otherwise a degenerate triangle may
+        # cause DelaunayTriangulation to hang
+        if !(mpt in mesh.coords)
+            push!(mesh.coords, midpoint(mesh, u, v))
+            push!(splitedges, (u, v, offset+i))
+        end
     end
 end
 
