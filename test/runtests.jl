@@ -34,7 +34,7 @@ end
 
 
 @testset "RootsAndPoles" begin
-    # include("RootsAndPoles.jl")
+    include("RootsAndPoles.jl")
 
     @testset "Simple Rational Function" begin include("SimpleRationalFunction.jl") end
     @testset "Default Function" begin include("DefaultFunction.jl") end

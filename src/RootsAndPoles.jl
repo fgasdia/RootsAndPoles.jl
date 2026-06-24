@@ -124,7 +124,7 @@ Return quadrant on the complex plane of complex number `z`.
 
 Return quadrant 2 if `isnan(z)`.
 """
-function quadrant(z)
+function quadrant(z::Number)
     r, i = reim(z)
     if r > 0 && i >= 0
         return 1
@@ -134,10 +134,8 @@ function quadrant(z)
         return 3
     elseif r >= 0 && i < 0
         return 4
-    elseif isnan(z)
+    else# if isnan(z)
         return 2  # z is possibly a pole
-    else
-        error("quadrant could not be evaluated for $z")
     end
 end
 
@@ -205,7 +203,7 @@ and Poles Finding Algorithm,” doi: 10.1109/TMTT.2023.3238014.
 function findextremeedges!(edgestosplit::Dict, splitedges, mesh)
     for e in splitedges
         A, B, M = e
-        @assert M > A && M > B "node index M is not greater than A and B"
+        @assert M > A && M > B LazyString("node index M is not greater than A and B")
         if unorderedphase(mesh, A, B, M)  # shouldsplit
             for V in get_neighbours(mesh, M)
                 DT.is_ghost_vertex(V) || get!(edgestosplit, minmax(M, V), SpecialEdge.Extreme)
@@ -303,7 +301,7 @@ end
 "Return all edges of `mesh` not in `edgestosplit` with a length of at least `atol`."
 function remainingedges!(edgestocheck, mesh, edgestosplit, atol)
     K = keys(edgestosplit)
-    @assert all(issorted, K) "each edge of `edgestosplit` must be sorted with `minmax`"
+    @assert all(issorted, K) LazyString("each edge of `edgestosplit` must be sorted with `minmax`")
     empty!(edgestocheck)
     for e in each_solid_edge(mesh)
         se = minmax(e...)
@@ -325,7 +323,7 @@ See also: [`trianglegradient`](@ref)
 """
 function analyzegradients!(edgestosplit::Dict, ga::GradientAnalysis, mesh, edges::Vector,
     prev_gradients, minlength, numtosplit)
-    @assert all(issorted, edges) "each edge of `edges` must be sorted by `minmax`"
+    @assert all(issorted, edges) LazyString("each edge of `edges` must be sorted by `minmax`")
 
     # Split every edge if there are fewer edges than we need to split
     numedges = length(edges)
@@ -436,9 +434,9 @@ function phasediff(pA, pB)
 end
 
 """
-    midpointcoords!(newcoords, splitedges, mesh, edgestosplit)
+    midpointcoords!(splitedges, mesh, edgestosplit)
 
-Update `newcoords` in place with coordinates at the midpoint of each edge in `edgestosplit`.
+Update `mesh` in place with coordinates at the midpoint of each edge in `edgestosplit`.
 Also updates `splitedges` in place with tuples of `(u, v, i)` for vertices `u, v` of each
 edge and what will be the index of the new vertex in the mesh, `i`.
 """
@@ -727,7 +725,7 @@ function evaluateregion(mesh, contour)
         ΔQ = qB - qA
         ΔQ == 3 && (ΔQ = -1)
         ΔQ == -3 && (ΔQ = 1)
-        abs(ΔQ) == 2 && @warn "|ΔQ| == 2 should not be along candidate boundary"
+        @assert abs(ΔQ) != 2 LazyString("|ΔQ| == 2 should not be along candidate boundary")
         q += ΔQ
     end
     q /= 4

@@ -11,7 +11,7 @@ function union_unoriented_edges!(u, E...)
     empty!(u)
     for e in E
         for x in e
-            DT.contains_unoriented_edge(x, UE) || push!(u, x)
+            DT.contains_unoriented_edge(x, E) || push!(u, x)
         end
     end
 end

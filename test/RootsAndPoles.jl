@@ -245,8 +245,3 @@ end
     @test v == [1.332, 1.395, 1.320, 1.301]
     @test v == v2
 end
-
-@testset "RootsAndPoles.jl" begin
-   
-    
-end
