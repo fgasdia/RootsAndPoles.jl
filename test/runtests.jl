@@ -32,10 +32,8 @@ function approxmatch(A, B)
     return true
 end
 
-
 @testset "RootsAndPoles" begin
-    # include("RootsAndPoles.jl")
-
+    @testset "RootsAndPoles Internals" begin include("RootsAndPoles.jl") end
     @testset "Simple Rational Function" begin include("SimpleRationalFunction.jl") end
     @testset "Default Function" begin include("DefaultFunction.jl") end
     @testset "Complex Modes" begin include("ComplexModes.jl") end

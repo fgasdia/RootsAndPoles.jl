@@ -62,13 +62,11 @@ coord(m::ComplexMesh, i::Vararg{Int, N}) where {N} = ntuple(j -> coord(m, i[j]),
 fval(m::ComplexMesh, i::Int) = m.fvals[i]
 fval(m::ComplexMesh, i::Vararg{Int, N}) where {N} = ntuple(j -> fval(m, i[j]), Val(N))
 fvals(m::ComplexMesh) = m.fvals
-fval!(m::ComplexMesh, i::Int, x) = (m.fvals[i] = x)
+# using an fvals! in `evalfcn!` results in a runtime dispatch when `f` is an anonymous function
 quadrant(m::ComplexMesh, i::Int) = quadrant(fval(m, i))
 quadrant(m::ComplexMesh, i::Vararg{Int, N}) where {N} = ntuple(j -> quadrant(fval(m, i[j])), Val(N))
 
 edge_length(m::ComplexMesh, e) = DT.edge_length(m.tri, e)::Float64
-# get_point(m::ComplexMesh, i::Int) = DT.get_point(m.tri, i)
-# get_point(m::ComplexMesh, i::Vararg{Int, N}) where {N} = ntuple(j -> DT.get_point(m.tri, i[j]), Val(N))
 each_solid_edge(m::ComplexMesh) = DT.each_solid_edge(m.tri)
 each_solid_triangle(m::ComplexMesh) = DT.each_solid_triangle(m.tri)
 get_adjacent(m::ComplexMesh, e) = DT.get_adjacent(m.tri, e)

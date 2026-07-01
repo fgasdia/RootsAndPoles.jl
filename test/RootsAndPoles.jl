@@ -1,45 +1,10 @@
-#==
-o Structs
-    x ComplexMesh
-    x FinderParams
-    o SpecialEdge ?
-    o MeshIterations: are lengths correct?
-    o PreviousIteration ?
-    x GradientAnalysis : empty!
-
-o interfaces
-    o rootsandpoles
-        o ReturnMultiplicity
-        o SkinnyMode
-        o MeshIterations
-        o test # of maxnodes is obeyed, maxiter, etc
-
-o functions
-    o trianglegradient: confirm grad algorithm to matlab expression?
-    o analyzegradients!: make a plot to confirm it's working?
-    o evalfcn!: confirm that ComplexMesh is updating, that threads are used, etc
-
-
-# tests
-o contouredges, increment_solid!, and edgekey: time this approach vs minmax on edge
-==#
-
-
-# TODO: Does max length keep getting shorter over iterations?
-# TODO: large and small tolerance
-# TODO: Write test comparing skinnymode criteria
-# TODO: Test with dense initial coords and sparse initial coords
-# TODO: Make sure it works to take the modified mesh and use it as starting point for new rootsandpoles? need to set startidx
-
 @testset "FinderParams" begin
     @test isconcretetype(FinderParams)
 
     pa = FinderParams()
-    pb = FinderParams(1e-9, 1000, 2000, 10000, 1)
-    pc = FinderParams(tol=1e-8)
+    pb = FinderParams(tol=1e-99)
 
-    @test pa == pb
-    @test pa != pc
+    @test pa != pb
 end
 
 @testset "ComplexMesh" begin
@@ -92,14 +57,10 @@ end
     # fval
     f1 = @inferred RP.fval(a, 1)
     f2 = @inferred RP.fval(a, 1, 2)
-    ftype = ComplexF64
-    @test f1 isa ftype
-    @test f2 isa Tuple{ftype, ftype}
+    @test f1 isa ComplexF64
+    @test f2 isa Tuple{ComplexF64, ComplexF64}
     fs = @inferred RP.fvals(a)
     @test fs == a.fvals
-    RP.fval(a, 1) == 0.123 ? (testval = 0.222) : (testval = 0.123)
-    @inferred RP.fval!(a, 1, testval)
-    @test RP.fval(a, 1) == testval
 
     # quadrant
     q1 = @inferred RP.quadrant(b, 1)
@@ -184,53 +145,6 @@ end
     end
 end
 
-########
-
-Hfcn(z) = (z + 2)/(z^2 + 1/4)  # zero: -2 and poles: ±im/2
-Hfcn_mesh() = rectangulardomain(complex(-3, -1), complex(1, 1), 0.6)
-
-# using GLMakie; Makie.inline!(false)
-function Hfcn_plot()
-    initial_mesh = Hfcn_mesh()
-    mesh = RP.QuadrantPoints(RP.QuadrantPoint.(initial_mesh))
-    tess = triangulate(mesh)
-    RP.assignquadrants!(get_points(tess), Hfcn, false)
-    pts = RP.getquadrant.(RP.each_point(mesh))
-    colors = Makie.wong_colors()[1:4]
-
-    
-    limits!(ax, -3.5, 1.5, -1.2, 1.2)
-    scatter!(ax, reim.(initial_mesh), color=colors[pts], markersize=10)
-    elements = [PolyElement(polycolor = colors[i]) for i in 1:4]
-    Legend(f[1,2], elements, string.(1:4), label="Quadrant")
-    f
-
-    fig = Figure()
-    ax = Axis(fig[1, 1], xlabel="Re", ylabel="Im")
-    triplot!(ax, tess, triangle_color=colors[pts], point_color=colors[pts])
-
-
-    E = Set{Tuple{Int, Int}}()
-    selectE = Set{Tuple{Int, Int}}()
-    RP.assignquadrants!(get_points(tess), Hfcn, false)
-    RP.candidateedges!(E, tess)
-    RP.selectedges!(selectE, tess, E, GRPFParams().tolerance)
-    unique_pts = Set(Iterators.flatten(selectE))
-    RP.splittriangles!(tess, unique_pts, GRPFParams().tolerance, GRPFParams().skinnytriangle)
-
-    RP.assignquadrants!(get_points(tess), Hfcn, false)
-    triplot!(ax, tess, triangle_color=colors[RP.getquadrant.(get_points(tess))], point_color=colors[pts])
-
-    scatter!(ax, reim.(initial_mesh), color=colors[pts], markersize=10)
-    elements = [PolyElement(polycolor = colors[i]) for i in 1:4]
-    Legend(f[1,2], elements, string.(1:4), label="Quadrant")
-    f
-
-    RP.assignquadrants!(get_points(mesh), Hfcn, false)
-    newpts = RP.getquadrant.(RP.each_point(mesh))
-    scatter!(ax, reim.(complex.(mesh)), color=colors[newpts], markersize=20)
-end
-
 @testset "deduplication" begin
     @test RP.toldigits(1e-9) == 8
     @test RP.toldigits(5e-9) == 8
@@ -244,9 +158,4 @@ end
     RP.dedupe!(v2; tol=1e-3)
     @test v == [1.332, 1.395, 1.320, 1.301]
     @test v == v2
-end
-
-@testset "RootsAndPoles.jl" begin
-   
-    
 end

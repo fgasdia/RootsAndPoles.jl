@@ -16,15 +16,17 @@ zc = -1/2 - sqrt(3)/6*1im
 true_roots = [za, zb+ϵ]
 true_poles = [zc, zb-ϵ]
 
-mesh = ComplexMesh([-1-1im, 1-1im, 1+1im, -1+1im]; rng=RNG)
-roots, poles = @inferred rootsandpoles(z->rationalfcn(z, ϵ), mesh)
+origcoords = ComplexMesh([-1-1im, 1-1im, 1+1im, -1+1im]; rng=RNG)
+
+coords = deepcopy(origcoords)
+roots, poles = @inferred rootsandpoles(z->rationalfcn(z, ϵ), coords)
 
 @test approxmatch(roots, true_roots)
 @test approxmatch(poles, true_poles)
 
 # ReturnMultiplicity
 coords = deepcopy(origcoords)
-zroots, zpoles, zrm, zpm = rootsandpoles(defaultfcn, coords, ReturnMultiplicity())
+zroots, zpoles, zrm, zpm = rootsandpoles(z->rationalfcn(z, ϵ), coords, ReturnMultiplicity())
 
 @test approxmatch(zroots, true_zroots)
 @test approxmatch(zpoles, true_zpoles)
@@ -32,7 +34,7 @@ zroots, zpoles, zrm, zpm = rootsandpoles(defaultfcn, coords, ReturnMultiplicity(
 # MeshIterations
 coords = deepcopy(origcoords)
 iterations = MeshIterations(coords)
-zroots, zpoles = rootsandpoles(defaultfcn, coords; iterations)
+zroots, zpoles = rootsandpoles(z->rationalfcn(z, ϵ), coords; iterations)
 
 @test approxmatch(zroots, true_zroots)
 @test approxmatch(zpoles, true_zpoles)

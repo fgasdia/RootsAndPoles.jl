@@ -9,9 +9,7 @@ true_zroots = [-0.999999999951224 - 0.000000000028656im,
 
 true_zpoles = [0.000000000380455 - 0.999999999701977im]
 
-origcoords = ComplexMesh([-2-2im, 2-2im, -2+2im, 2+2im]; rng=RNG)
-
-coords = deepcopy(origcoords)
+coords = ComplexMesh([-2-2im, 2-2im, -2+2im, 2+2im]; rng=RNG)
 zroots, zpoles = rootsandpoles(simplefcn, coords)
 
 @test approxmatch(zroots, true_zroots)

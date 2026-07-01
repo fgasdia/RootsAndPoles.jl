@@ -66,7 +66,6 @@ matlab_zrm = ones(length(true_zroots))
 matlab_zpm = [-2, -2]
 
 
-
 origcoords = ComplexMesh([-1-1im, 1-1im, 1+1im, -1+1im]; rng=RNG)
 
 coords = deepcopy(origcoords)
@@ -77,7 +76,8 @@ zroots, zpoles = rootsandpoles(complexmodes, coords)
 
 coords = deepcopy(origcoords)
 iterations = MeshIterations(coords)
-zroots, zpoles = rootsandpoles(complexmodes, coords; iterations, params=FinderParams(maxadaptivenodes=3000))
+zroots, zpoles = rootsandpoles(complexmodes, coords;
+                               iterations, params=FinderParams(maxadaptivenodes=3000))
 
 @test approxmatch(zroots, true_zroots)
 @test approxmatch(zpoles, true_zpoles)
@@ -85,7 +85,8 @@ zroots, zpoles = rootsandpoles(complexmodes, coords; iterations, params=FinderPa
 R = 1.0
 r = 0.15
 densecoords = ComplexMesh(RP.diskdomain(R, r); rng=RNG)
-zroots, zpoles = rootsandpoles(complexmodes, densecoords; params=FinderParams(maxadaptivenodes=1000))
+zroots, zpoles = rootsandpoles(complexmodes, densecoords;
+                               params=FinderParams(maxadaptivenodes=1000))
 
 @test approxmatch(zroots, true_zroots)
 @test approxmatch(zpoles, true_zpoles)
