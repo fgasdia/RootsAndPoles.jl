@@ -69,9 +69,9 @@ include("coordinate_domains.jl")
 
 @enumx SpecialEdge::Int8 begin
     Candidate = 1
-    Extreme
-    Skinny
-    Gradient
+    Extreme = 2
+    Skinny = 3
+    Gradient = 4
     Normal = 0
 end
 getcandidateedges(E::Dict) = (e.first for e in E if e.second == SpecialEdge.Candidate)
@@ -82,7 +82,7 @@ struct MeshIterations{M<:ComplexMesh}
     refinement_mode::Vector{Symbol}
 end
 MeshIterations(m::M) where {M} =
-    MeshIterations{M}(M[], Vector{Dict{EDGETYPE,SpecialEdge.T}}(), Vector{Symbol}())
+    MeshIterations{M}(Vector{M}(), Vector{Dict{EDGETYPE,SpecialEdge.T}}(), Vector{Symbol}())
 push_mesh!(mi::MeshIterations, m) = push!(mi.mesh, m)
 push_edges!(mi::MeshIterations, e) = push!(mi.splitedges, e)
 push_mode!(mi::MeshIterations, m) = push!(mi.refinement_mode, m)
@@ -144,7 +144,7 @@ end
 
 Evaluate function `f` from `startindex` to the last node of `mesh`, updating `mesh.fvals` in place.
 
-Function evaluation is multithreaded into number `numtasks` of tasks.
+Function evaluation is multithreaded into `numtasks` number of tasks.
 """
 function evalfcn!(f, mesh, startindex; numtasks=Threads.nthreads())
     indices = startindex:lastindex(mesh)
