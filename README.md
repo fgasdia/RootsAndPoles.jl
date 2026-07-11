@@ -1,6 +1,6 @@
 # RootsAndPoles.jl: Global complex Roots and Poles Finding in Julia
 
-[![Build Status](https://travis-ci.com/fgasdia/RootsAndPoles.jl.svg?branch=master)](https://travis-ci.com/fgasdia/RootsAndPoles.jl) [![Build status](https://ci.appveyor.com/api/projects/status/megpgn8l1ej5m3ww?svg=true)](https://ci.appveyor.com/project/fgasdia/rootsandpoles-jl) [![DOI](https://zenodo.org/badge/154031378.svg)](https://zenodo.org/badge/latestdoi/154031378)
+[![Build status](https://ci.appveyor.com/api/projects/status/megpgn8l1ej5m3ww?svg=true)](https://ci.appveyor.com/project/fgasdia/rootsandpoles-jl) [![DOI](https://zenodo.org/badge/154031378.svg)](https://zenodo.org/badge/latestdoi/154031378)
 
 A Julia implementation of [GRPF](https://github.com/PioKow/GRPF) by Piotr Kowalczyk and [SA-GRPF](https://github.com/PioKow/SAGRPF) by Sebastian Dziedziewicz, Malgorzata Warecka, Rafal Lech, and Piotr Kowalczyk.
 
@@ -13,7 +13,7 @@ The SA-GRPF algorithm first generates a self-adaptive mesh on the complex plane 
 Candidate regions to search for roots and poles are determined and the discretized [Cauchy's argument principle](https://en.wikipedia.org/wiki/Argument_principle) is applied without needing the derivative of the function or integration over the contour.
 To improve the accuracy of the results, mesh refinement occurs inside the identified candidate regions.
 
-![simplefcn](simplefcn_sagrpf.svg)
+![simplefcn](simplefcn_sagrpf.png)
 
 ## Usage
 
@@ -93,10 +93,12 @@ Although plotting is not built into this package, plots of the mesh iterations o
 Example functions for plotting using [Makie.jl](https://docs.makie.org/stable/) are provided in the `plotting.jl` file in the base of this GitHub repo.
 
 ```julia
+using GLMakie
+
 coords = ComplexMesh([-2-2im, 2-2im, -2+2im, 2+2im]; rng=RNG)
 zroots, zpoles = rootsandpoles(simplefcn, coords)
 fig, ax = plotquadrants(coords; title="Simple rational function f")
-save("simplefcn_sagrpf.svg", fig)
+save("simplefcn_sagrpf.png", fig)
 ```
 
 ### Additional examples

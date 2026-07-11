@@ -62,7 +62,7 @@ coord(m::ComplexMesh, i::Vararg{Int, N}) where {N} = ntuple(j -> coord(m, i[j]),
 fval(m::ComplexMesh, i::Int) = m.fvals[i]
 fval(m::ComplexMesh, i::Vararg{Int, N}) where {N} = ntuple(j -> fval(m, i[j]), Val(N))
 fvals(m::ComplexMesh) = m.fvals
-fval!(m::ComplexMesh, i::Int, x) = (m.fvals[i] = x)
+# using fval! in `evalfcn!` results in a runtime dispatch when `f` is an anonymous function
 quadrant(m::ComplexMesh, i::Int) = quadrant(fval(m, i))
 quadrant(m::ComplexMesh, i::Vararg{Int, N}) where {N} = ntuple(j -> quadrant(fval(m, i[j])), Val(N))
 

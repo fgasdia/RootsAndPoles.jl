@@ -2,7 +2,9 @@
 
 Important notices about MAJOR and MINOR version releases.
 
-- `v2.0.0`: Major breaking changes to interface. Change of triangulation library from VoronoiDelaunay.jl to DelaunayTriangulation.jl. Updated multi-tasking approach. Implementation of SA-GRPF algorithm.
+- `v3.0.0`: Major breaking changes to interface. Change of triangulation library from VoronoiDelaunay.jl to DelaunayTriangulation.jl. Updated multi-tasking approach. Implementation of SA-GRPF algorithm.
+
+- `v2.0.0`: Bump minimum Julia to v1.7 and upgrades Manifest to version 2.0. GRPFParams is now immutable.
 
 - `v1.5.0`: Minimum Julia version now `v1.7`. Removes custom implementation of fast `delaunayedges`.
 

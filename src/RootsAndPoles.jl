@@ -151,12 +151,10 @@ function evalfcn!(f, mesh, startindex; numtasks=Threads.nthreads())
     @sync for inds in chunks(indices; n=numtasks, split=RoundRobin())
         @spawn for i in inds
             z = complex(coord(mesh, i)...)
-            v = f(z)
-            fval!(mesh, i, v)
+            mesh.fvals[i] = f(z)
         end
     end
 end
-
 
 """
     findcandidateedges(mesh)
