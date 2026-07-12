@@ -7,6 +7,11 @@ on:
     branches: [main]
     tags: ["*"]
 
+# needed to allow julia-actions/cache to delete old caches that it has created
+permissions:
+  actions: write
+  contents: read
+
 jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
@@ -15,8 +20,8 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - 1.10 # minimum Julia version the package supports.
-          - 1 # automatically expands to the latest stable 1.x release of Julia.
+          - "1.10" # minimum Julia version the package supports.
+          - "1" # automatically expands to the latest stable 1.x release of Julia.
         os:
           - ubuntu-latest
         arch:
@@ -47,5 +52,6 @@ jobs:
             ${{ runner.os }}-${{ matrix.arch }}-test-
             ${{ runner.os }}-${{ matrix.arch }}-
             ${{ runner.os }}-
+      - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
