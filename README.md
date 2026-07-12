@@ -1,6 +1,6 @@
 # RootsAndPoles.jl: Global complex Roots and Poles Finding in Julia
 
-[![Build status](https://ci.appveyor.com/api/projects/status/megpgn8l1ej5m3ww?svg=true)](https://ci.appveyor.com/project/fgasdia/rootsandpoles-jl) [![DOI](https://zenodo.org/badge/154031378.svg)](https://zenodo.org/badge/latestdoi/154031378)
+[![CI](https://github.com/fgasdia/RootsAndPoles.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/fgasdia/RootsAndPoles.jl/actions/workflows/ci.yml) [![DOI](https://zenodo.org/badge/154031378.svg)](https://zenodo.org/badge/latestdoi/154031378)
 
 A Julia implementation of [GRPF](https://github.com/PioKow/GRPF) by Piotr Kowalczyk and [SA-GRPF](https://github.com/PioKow/SAGRPF) by Sebastian Dziedziewicz, Malgorzata Warecka, Rafal Lech, and Piotr Kowalczyk.
 
