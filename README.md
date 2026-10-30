@@ -65,7 +65,7 @@ For example, if `tol = 1e-9`, all entries of `zroots` and `zpoles` must be uniqu
 
 ```julia
 params = FinderParams(tol=1e-6, maxadaptivenodes=500)
-zroots, zpoles = rootsandpoles(simplefcn, coords; params)
+zroots, zpoles = rootsandpoles(simplefcn, coords, params)
 ```
 
 Evaluation of the user-provided function, e.g. `simplefcn`, can be parallelized by spawning `numtasks` tasks.

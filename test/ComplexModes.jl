@@ -77,7 +77,7 @@ zroots, zpoles = rootsandpoles(complexmodes, coords)
 
 coords = deepcopy(origcoords)
 iterations = MeshIterations(coords)
-zroots, zpoles = rootsandpoles(complexmodes, coords; iterations, params=FinderParams(maxadaptivenodes=3000))
+zroots, zpoles = rootsandpoles(complexmodes, coords, FinderParams(maxadaptivenodes=3000); iterations)
 
 @test approxmatch(zroots, true_zroots)
 @test approxmatch(zpoles, true_zpoles)
@@ -85,7 +85,7 @@ zroots, zpoles = rootsandpoles(complexmodes, coords; iterations, params=FinderPa
 R = 1.0
 r = 0.15
 densecoords = ComplexMesh(RP.diskdomain(R, r); rng=RNG)
-zroots, zpoles = rootsandpoles(complexmodes, densecoords; params=FinderParams(maxadaptivenodes=1000))
+zroots, zpoles = rootsandpoles(complexmodes, densecoords, FinderParams(maxadaptivenodes=1000))
 
 @test approxmatch(zroots, true_zroots)
 @test approxmatch(zpoles, true_zpoles)
@@ -93,7 +93,7 @@ zroots, zpoles = rootsandpoles(complexmodes, densecoords; params=FinderParams(ma
 # multithreaded
 params = FinderParams(maxadaptivenodes=3000, numtasks=Threads.nthreads())
 coords = deepcopy(origcoords)
-zroots, zpoles = rootsandpoles(complexmodes, coords; params)
+zroots, zpoles = rootsandpoles(complexmodes, coords, params)
 
 @test approxmatch(zroots, true_zroots)
 @test approxmatch(zpoles, true_zpoles)

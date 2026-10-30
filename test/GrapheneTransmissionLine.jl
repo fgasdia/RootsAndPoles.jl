@@ -58,7 +58,7 @@ origcoords = ComplexMesh([-100-100im, 400-100im, -100+400im, 400+400im]; rng=RNG
 params = FinderParams(maxadaptivenodes=10000)
 
 coords = deepcopy(origcoords)
-zroots, zpoles = rootsandpoles(graphenefunction, coords; params)
+zroots, zpoles = rootsandpoles(graphenefunction, coords, params)
 
 @test approxmatch(zroots, true_zroots)
 @test approxmatch(zpoles, true_zpoles)
@@ -66,7 +66,7 @@ zroots, zpoles = rootsandpoles(graphenefunction, coords; params)
 # MeshIterations
 coords = deepcopy(origcoords)
 iterations = MeshIterations(coords)
-zroots, zpoles = rootsandpoles(graphenefunction, coords; iterations, params)
+zroots, zpoles = rootsandpoles(graphenefunction, coords, params; iterations)
 
 @test approxmatch(zroots, true_zroots)
 @test approxmatch(zpoles, true_zpoles)

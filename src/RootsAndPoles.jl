@@ -185,7 +185,7 @@ function iscandidateedge(edge, mesh)
 end
 
 """
-    findextremeedges(splitedges, mesh)
+    findextremeedges!(edgestosplit::Dict, splitedges, mesh)
 
 Return edges for further refinement if the phase of nodes added in the last iteration is
 is outside the range of the phases of the original edge nodes.
@@ -247,7 +247,7 @@ function unorderedphase(mesh, A, B, M)
 end
 
 """
-    findskinnyedges(triangles, mesh, skinny_mode)
+    findskinnyedges!(edgestosplit::Dict, triangles, mesh, skinny_mode::SkinnyMode)
 
 Return the longest edge of "skinny" triangles as defined by `refinement_mode`. Returns `nothing` if
 there are no skinny triangles in `triangles`.
@@ -310,7 +310,8 @@ function remainingedges!(edgestocheck, mesh, edgestosplit, atol)
 end
 
 """
-    analyzegradients!(edgestosplit, mesh, edges, prev_gradients, minlength, numtosplit)
+    analyzegradients!(edgestosplit::Dict, ga::GradientAnalysis, mesh, edges::Vector,
+        prev_gradients, minlength, numtosplit)
 
 Return up to number `numtosplit` of `edges` for mesh refinement based on indicator value
 ``I = α log₁₀(𝓁/minlength)`` where ``α`` is the angle between phase gradient vectors for
@@ -455,7 +456,8 @@ function midpointcoords!(splitedges, mesh, edgestosplit)
 end
 
 """
-    adaptive()
+    adaptive!(edgestosplit::Dict, ga::GradientAnalysis, mesh, previter, edgestocheck, tol,
+        skinny_mode::SkinnyMode=BaseHeightRatio())
 """
 function adaptive!(edgestosplit::Dict, ga::GradientAnalysis, mesh, previter, edgestocheck,
     tol, skinny_mode::SkinnyMode=BaseHeightRatio())
@@ -768,8 +770,7 @@ isroot(q) = q > 0
 ispole(q) = q < 0
 
 """
-    rootsandpoles(f, mesh::ComplexMesh;
-        params=FinderParams(),
+    rootsandpoles(f, mesh::ComplexMesh, params=FinderParams();
         refinement_mode=:adaptive,
         dedupe=true,
         skinny_mode::SkinnyMode=BaseHeightRatio(),
@@ -785,8 +786,7 @@ which to search.
 
     `mesh` is modified in place.
 """
-function rootsandpoles(f, mesh::ComplexMesh;
-    params=FinderParams(),
+function rootsandpoles(f, mesh::ComplexMesh, params=FinderParams();
     refinement_mode=:adaptive,
     dedupe=true,
     skinny_mode::SkinnyMode=BaseHeightRatio(),
@@ -805,8 +805,7 @@ function rootsandpoles(f, mesh::ComplexMesh;
 end
 
 """
-    rootsandpoles(f, mesh::ComplexMesh, ::ReturnMultiplicity;
-        params=FinderParams(),
+    rootsandpoles(f, mesh::ComplexMesh, ::ReturnMultiplicity, params=FinderParams();
         refinement_mode=:adaptive,
         dedupe=true,
         skinny_mode::SkinnyMode=BaseHeightRatio(),
@@ -815,8 +814,7 @@ end
 Return `roots`, `poles`, `rootmult`, and `polemult` multiplicities if `ReturnMultiplicity()`
 is also provided to the `rootsandpoles` function.
 """
-function rootsandpoles(f, mesh::ComplexMesh, ::ReturnMultiplicity;
-    params=FinderParams(),
+function rootsandpoles(f, mesh::ComplexMesh, ::ReturnMultiplicity, params=FinderParams();
     refinement_mode=:adaptive,
     dedupe=true,
     skinny_mode::SkinnyMode=BaseHeightRatio(),
