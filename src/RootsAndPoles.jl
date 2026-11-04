@@ -617,6 +617,8 @@ function buildregions(mesh)
     contours = Vector{Set{EDGETYPE}}()
     contourcount = 1
 
+    isempty(edgecount) && return contours
+
     # Pick an edge from edgecount and then look for a connecting edge among the remaining edges
     k, _ = pop!(edgecount)
     push!(contours, Set((k,)))  # must be done for every new contour
